@@ -164,11 +164,18 @@ export default function WatchPage() {
             <div className="flex items-center gap-2">
               <Button
                 className="focusable gap-2"
-                onClick={() => {
+                onClick={async () => {
                   const v = videoRef.current;
                   if (!v) return;
-                  if (v.paused) v.play();
-                  else v.pause();
+                  if (v.paused) {
+                    // Request fullscreen from the direct user interaction path.
+                    await requestFullscreen();
+                    await v.play().catch(() => {
+                      setVideoError("Playback was blocked by the browser. Try pressing play again.");
+                    });
+                  } else {
+                    v.pause();
+                  }
                 }}
               >
                 {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
