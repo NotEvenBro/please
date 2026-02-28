@@ -428,6 +428,22 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
   const id = encodeURIComponent(req.params.id);
   const mediaSourceId = (req.query.mediaSourceId || '').toString();
   const playSessionId = (req.query.playSessionId || '').toString(); // optional
+  const preferTranscode = String(req.query.preferTranscode || '') === '1';
+
+  const shouldTranscodeForAudioCompatibility = (mediaSource) => {
+    if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
+
+    // Common codecs typically supported by TV browsers/Chromium builds.
+    // If source audio codec is outside this set, prefer transcoding to avoid silent playback.
+    const supportedAudioCodecs = new Set(['aac', 'mp3', 'opus', 'vorbis']);
+    const audioStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'audio');
+    if (!audioStreams.length) return false;
+
+    return audioStreams.some((s) => {
+      const codec = String(s?.Codec || '').toLowerCase();
+      return codec && !supportedAudioCodecs.has(codec);
+    });
+  };
   if (!mediaSourceId) {
     // Fallback: fetch PlaybackInfo to discover MediaSourceId
     try {
@@ -477,13 +493,22 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         return res.status(502).json({ error: 'PlaybackInfo returned no MediaSources' });
       }
 
-      const discovered = info.json.MediaSources[0].Id;
+      const source = info.json.MediaSources[0];
+      const discovered = source.Id;
       const discoveredSession = info.json.PlaySessionId || '';
       console.log('[Stream] Discovered mediaSourceId via PlaybackInfo', discovered);
 
       // Continue with discovered IDs
       const kind = (req.query.kind || '').toString().toLowerCase();
       const isAudio = kind === 'track' || kind === 'audio';
+
+      if ((preferTranscode || shouldTranscodeForAudioCompatibility(source)) && !isAudio) {
+        const transcodingUrl = source.TranscodingUrl;
+        if (transcodingUrl) {
+          console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
+          return proxyJellyfinStream(transcodingUrl, req, res);
+        }
+      }
 
       let p =
         `/${isAudio ? 'Audio' : 'Videos'}/${id}/stream` +
@@ -500,6 +525,61 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
 
 const kind = (req.query.kind || '').toString().toLowerCase();
   const isAudio = kind === 'track' || kind === 'audio';
+
+  if (preferTranscode && !isAudio) {
+    try {
+      const qs =
+        `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
+        `&IsPlayback=true&AutoOpenLiveStream=true`;
+
+      const body = JSON.stringify({});
+      const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
+      const mod = url.protocol === 'https:' ? https : http;
+      const headers = {
+        'X-Emby-Token': config.jellyfinApiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      };
+
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers,
+      };
+
+      const info = await new Promise((resolve, reject) => {
+        const r = mod.request(options, (pr) => {
+          let data = '';
+          pr.on('data', (c) => (data += c));
+          pr.on('end', () => {
+            try {
+              resolve(data ? JSON.parse(data) : null);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        r.on('error', reject);
+        r.write(body);
+        r.end();
+      });
+
+      if (
+        info &&
+        info.MediaSources &&
+        info.MediaSources[0] &&
+        (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForAudioCompatibility(info.MediaSources[0])))
+      ) {
+        console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
+        return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
+      }
+    } catch (e) {
+      console.error('[Stream] preferTranscode fallback failed', e?.message || e);
+    }
+  }
 
   let p =
     `/${isAudio ? 'Audio' : 'Videos'}/${id}/stream` +
