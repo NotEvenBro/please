@@ -6,6 +6,26 @@ import { Button } from "@/components/ui/button";
 import { useItem } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 
+async function tryRequestFullscreen(video: HTMLVideoElement) {
+  const v = video as HTMLVideoElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+  if (document.fullscreenElement) return;
+
+  try {
+    if (typeof v.requestFullscreen === "function") {
+      await v.requestFullscreen();
+    } else if (typeof v.webkitRequestFullscreen === "function") {
+      await v.webkitRequestFullscreen();
+    } else if (typeof v.msRequestFullscreen === "function") {
+      await v.msRequestFullscreen();
+    }
+  } catch {
+    // Browsers can reject this if there was no user gesture; ignore safely.
+  }
+}
+
 export default function WatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
