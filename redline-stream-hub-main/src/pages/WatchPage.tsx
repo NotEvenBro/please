@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, Pause } from "lucide-react";
+import { ExternalLink, Loader2, AlertCircle, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useItem } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
@@ -24,11 +24,35 @@ export default function WatchPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  const requestFullscreen = async () => {
+    const v = videoRef.current as HTMLVideoElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (!v) return;
+    if (document.fullscreenElement) return;
+
+    try {
+      if (typeof v.requestFullscreen === "function") {
+        await v.requestFullscreen();
+      } else if (typeof v.webkitRequestFullscreen === "function") {
+        await v.webkitRequestFullscreen();
+      } else if (typeof v.msRequestFullscreen === "function") {
+        await v.msRequestFullscreen();
+      }
+    } catch {
+      // Browsers can reject this if there was no user gesture; ignore safely.
+    }
+  };
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => setIsPlaying(true);
+    const onPlay = () => {
+      setIsPlaying(true);
+      requestFullscreen();
+    };
     const onPause = () => setIsPlaying(false);
     const onError = () => {
       // Browser often doesn't expose much detail; surface the basic state.
@@ -48,11 +72,15 @@ export default function WatchPage() {
 
   return (
     <Layout>
-      <div className="page-container space-y-4">
+      <div className="page-container tv-safe pt-[calc(var(--nav-height)+1rem)] space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <Button variant="ghost" className="focusable gap-2" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="w-4 h-4" />
-            Back
+          <Button
+            variant="ghost"
+            className="focusable h-14 w-14 p-0 rounded-full bg-background/55 hover:bg-background/75 border border-border/60"
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+          >
+            <img src="/back-button.svg" alt="Back" className="h-10 w-10" />
           </Button>
 
           {id ? (

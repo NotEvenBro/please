@@ -184,7 +184,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" data-tv-group="details-actions">
               <Button
                 className="focusable gap-2 bg-foreground text-background hover:bg-foreground/90 font-bold px-6 py-5 rounded-md"
                 onClick={primaryAction.onClick}
@@ -290,7 +290,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
           
           {effective.kind === "Series" && (
-            <div className="space-y-3">
+            <div className="space-y-3" data-tv-group="details-episodes">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-xl font-black text-foreground">Episodes</h3>
                 <div className="w-44">
