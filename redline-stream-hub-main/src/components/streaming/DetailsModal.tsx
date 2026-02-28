@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Play, Plus, Star, Music2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MediaCard from "./MediaCard";
 import type { MediaItemUI } from "@/types/media";
@@ -52,6 +51,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   const [ratingDraft, setRatingDraft] = useState<number>(0);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
+  const [ratingOpen, setRatingOpen] = useState(false);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -80,6 +80,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
     if (!effective) return;
     setRatingDraft(effective.userStars ?? 0);
     setRatingError(null);
+    setRatingOpen(false);
   }, [effective?.id]);
 
   const { data: recentMovies } = useRecentMovies(12);
@@ -183,7 +184,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" data-tv-group="details-actions">
               <Button
                 className="focusable gap-2 bg-foreground text-background hover:bg-foreground/90 font-bold px-6 py-5 rounded-md"
                 onClick={primaryAction.onClick}
@@ -192,14 +193,21 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                 <primaryAction.icon className="w-4 h-4 fill-current" />
                 {primaryAction.label}
               </Button>
-<Popover modal>
-                <PopoverTrigger asChild>
-                  <Button variant="secondary" className="focusable gap-2 px-6 py-5 rounded-md" aria-label="Rate">
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="focusable gap-2 px-6 py-5 rounded-md"
+                  aria-label="Rate"
+                  aria-expanded={ratingOpen}
+                  onClick={() => setRatingOpen((v) => !v)}
+                >
                     <Star className="w-4 h-4" />
                     Rate
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 z-[70] pointer-events-auto" align="start">
+                </Button>
+
+                {ratingOpen && (
+                  <div className="absolute left-0 top-full mt-2 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md z-[80]">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">Your rating</div>
@@ -268,8 +276,9 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                       Ratings are saved locally on this device.
                     </div>
                   </div>
-                </PopoverContent>
-              </Popover>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -281,7 +290,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
           
           {effective.kind === "Series" && (
-            <div className="space-y-3">
+            <div className="space-y-3" data-tv-group="details-episodes">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-xl font-black text-foreground">Episodes</h3>
                 <div className="w-44">
