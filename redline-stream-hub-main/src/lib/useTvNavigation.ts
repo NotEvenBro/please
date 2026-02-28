@@ -68,13 +68,20 @@ export function useTvNavigation() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const key = e.key;
+      const normalizedKey =
+        key === "Left" ? "ArrowLeft" :
+        key === "Right" ? "ArrowRight" :
+        key === "Up" ? "ArrowUp" :
+        key === "Down" ? "ArrowDown" :
+        key === "OK" || key === "Select" ? "Enter" :
+        key;
 
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const items = getFocusables();
 
       // If nothing focused yet, focus first nav item on arrow/enter
       if (!active || !active.classList.contains("focusable")) {
-        if (["ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Enter"].includes(key)) {
+        if (["ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Enter"].includes(normalizedKey)) {
           const first = items[0];
           if (first) {
             e.preventDefault();
@@ -85,9 +92,9 @@ export function useTvNavigation() {
         return;
       }
 
-      if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown") {
+      if (normalizedKey === "ArrowLeft" || normalizedKey === "ArrowRight" || normalizedKey === "ArrowUp" || normalizedKey === "ArrowDown") {
         e.preventDefault();
-        const dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
+        const dir = normalizedKey === "ArrowLeft" ? "left" : normalizedKey === "ArrowRight" ? "right" : normalizedKey === "ArrowUp" ? "up" : "down";
         const next = pickNext(active, dir, items);
         if (next) {
           next.focus();
@@ -97,7 +104,7 @@ export function useTvNavigation() {
       }
 
       // Enter/Space to activate like Netflix remote
-      if (key === "Enter" || key === " ") {
+      if (normalizedKey === "Enter" || normalizedKey === " ") {
         // Don't break typing in inputs
         const tag = (active.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select") return;
