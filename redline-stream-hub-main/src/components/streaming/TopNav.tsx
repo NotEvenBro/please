@@ -31,6 +31,7 @@ export default function TopNav() {
       style={{ height: "var(--nav-height)" }}
       role="navigation"
       aria-label="Main navigation"
+      data-tv-group="top-nav"
     >
       <div className="flex items-center h-full tv-safe">
         <Link to="/" className="focusable mr-6 sm:mr-10 flex items-center gap-3">
