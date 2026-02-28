@@ -53,20 +53,68 @@ export default function WatchPage() {
     setVideoError(null);
   }, [directStreamUrl]);
 
+  const requestFullscreen = async () => {
+    const v = videoRef.current as HTMLVideoElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (!v) return;
+    if (document.fullscreenElement) return;
+
+    try {
+      if (typeof v.requestFullscreen === "function") {
+        await v.requestFullscreen();
+      } else if (typeof v.webkitRequestFullscreen === "function") {
+        await v.webkitRequestFullscreen();
+      } else if (typeof v.msRequestFullscreen === "function") {
+        await v.msRequestFullscreen();
+      }
+    } catch {
+      // Browsers can reject this if there was no user gesture; ignore safely.
+    }
+  };
+
+  const requestFullscreen = async () => {
+    const v = videoRef.current as HTMLVideoElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (!v) return;
+    if (document.fullscreenElement) return;
+
+    try {
+      if (typeof v.requestFullscreen === "function") {
+        await v.requestFullscreen();
+      } else if (typeof v.webkitRequestFullscreen === "function") {
+        await v.webkitRequestFullscreen();
+      } else if (typeof v.msRequestFullscreen === "function") {
+        await v.msRequestFullscreen();
+      }
+    } catch {
+      // Browsers can reject this if there was no user gesture; ignore safely.
+    }
+  };
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
     const onPlay = () => {
       setIsPlaying(true);
-      void tryRequestFullscreen(v);
+      requestFullscreen();
     };
-    v.onplay = onPlay;
-    v.onpause = () => setIsPlaying(false);
+    const onPause = () => setIsPlaying(false);
+    const onError = () => {
+      // Browser often doesn't expose much detail; surface the basic state.
+      setVideoError("Video failed to load or is not supported by this browser/codec.");
+    };
+    const onPause = () => setIsPlaying(false);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
 
     return () => {
-      v.onplay = null;
-      v.onpause = null;
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
     };
   }, [streamUrl]);
 
@@ -167,7 +215,7 @@ export default function WatchPage() {
                   if (!v) return;
                   if (v.paused) {
                     // Request fullscreen from the direct user interaction path.
-                    await tryRequestFullscreen(v);
+                    await requestFullscreen();
                     await v.play().catch(() => {
                       setVideoError("Playback was blocked by the browser. Try pressing play again.");
                     });
