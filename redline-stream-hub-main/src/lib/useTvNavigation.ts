@@ -44,8 +44,7 @@ function center(rect: DOMRect) {
 }
 
 function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
-
-  function getNavigationScope(): ParentNode {
+function getNavigationScope(): ParentNode {
   const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
   if (openModal) return openModal;
   return document.querySelector("main") ?? document.body;

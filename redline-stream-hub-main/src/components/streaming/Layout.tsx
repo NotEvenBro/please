@@ -9,6 +9,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   useTvNavigation();
+
   useEffect(() => {
     init({
       debug: false,
