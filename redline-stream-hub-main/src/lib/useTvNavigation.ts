@@ -119,7 +119,14 @@ function isTypingContext(active: HTMLElement | null): boolean {
 export function useTvNavigation() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const key = e.key;
+      const normalizedKey =
+        key === "Left" ? "ArrowLeft" :
+        key === "Right" ? "ArrowRight" :
+        key === "Up" ? "ArrowUp" :
+        key === "Down" ? "ArrowDown" :
+        key === "OK" || key === "Select" ? "Enter" :
+        key;
 
       const normalizedKey = normalizeKey(e.key);
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -133,7 +140,7 @@ export function useTvNavigation() {
       const items = getFocusables(scope);
 
       if (!active || !active.classList.contains("focusable")) {
-        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(normalizedKey)) {
+        if (["ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Enter"].includes(normalizedKey)) {
           const first = items[0];
           if (!first) return;
           e.preventDefault();
@@ -143,17 +150,9 @@ export function useTvNavigation() {
         return;
       }
 
-      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(normalizedKey)) {
+      if (normalizedKey === "ArrowLeft" || normalizedKey === "ArrowRight" || normalizedKey === "ArrowUp" || normalizedKey === "ArrowDown") {
         e.preventDefault();
-        const dir: Dir =
-          normalizedKey === "ArrowLeft"
-            ? "left"
-            : normalizedKey === "ArrowRight"
-            ? "right"
-            : normalizedKey === "ArrowUp"
-            ? "up"
-            : "down";
-
+        const dir = normalizedKey === "ArrowLeft" ? "left" : normalizedKey === "ArrowRight" ? "right" : normalizedKey === "ArrowUp" ? "up" : "down";
         const next = pickNext(active, dir, items);
         if (next) {
           next.focus();
@@ -162,8 +161,11 @@ export function useTvNavigation() {
         return;
       }
 
+      // Enter/Space to activate like Netflix remote
       if (normalizedKey === "Enter" || normalizedKey === " ") {
-        if (isTypingContext(active)) return;
+        // Don't break typing in inputs
+        const tag = (active.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
         e.preventDefault();
         active.click();
       }
