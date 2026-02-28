@@ -19,7 +19,16 @@ function normalizeKey(key: string) {
 function isFocusable(el: Element): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false;
   if (!el.classList.contains("focusable")) return false;
+  if ((el as HTMLButtonElement).disabled) return false;
   if (el.getAttribute("aria-disabled") === "true") return false;
+
+  const style = window.getComputedStyle(el);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
   if ((el as HTMLButtonElement).disabled) return false;
 
   const style = window.getComputedStyle(el);
@@ -34,6 +43,7 @@ function center(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
+function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
 function getNavigationScope(): ParentNode {
   const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
   if (openModal) return openModal;
@@ -77,6 +87,19 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
     let directionalOk = false;
 
     if (dir === "left" && dx < -8) {
+      ok = true;
+      primary = Math.abs(dx);
+      secondary = Math.abs(dy);
+    } else if (dir === "right" && dx > 8) {
+      ok = true;
+      primary = Math.abs(dx);
+      secondary = Math.abs(dy);
+    } else if (dir === "up" && dy < -8) {
+      ok = true;
+      primary = Math.abs(dy);
+      secondary = Math.abs(dx);
+    } else if (dir === "down" && dy > 8) {
+      ok = true;
       directionalOk = true;
       primary = Math.abs(dx);
       secondary = Math.abs(dy);
@@ -94,6 +117,8 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
       secondary = Math.abs(dx);
     }
 
+    if (!ok) continue;
+    candidates.push({ el, score: primary * 10 + secondary });
     if (!directionalOk) continue;
 
     const groupPenalty = getGroupKey(el) === currentGroup ? 0 : dir === "left" || dir === "right" ? 250 : 25;
@@ -105,6 +130,14 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
   return candidates[0]?.el ?? null;
 }
 
+function getScope(): ParentNode {
+  const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
+  if (openModal) return openModal;
+  return document.querySelector("main") ?? document.body;
+}
+
+function selectOpen() {
+  return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
 function hasOpenSelectContent() {
   return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
 }
@@ -119,6 +152,16 @@ function isTypingContext(active: HTMLElement | null): boolean {
 export function useTvNavigation() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (selectOpen()) return;
+
+      const key = normalizeKey(e.key);
+      const scope = getScope();
+      const items = Array.from(scope.querySelectorAll(".focusable")).filter(isFocusable);
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (!active || !active.classList.contains("focusable")) {
+        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(key)) {
       const key = e.key;
       const normalizedKey =
         key === "Left" ? "ArrowLeft" :
@@ -150,6 +193,9 @@ export function useTvNavigation() {
         return;
       }
 
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
+        e.preventDefault();
+        const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
       if (normalizedKey === "ArrowLeft" || normalizedKey === "ArrowRight" || normalizedKey === "ArrowUp" || normalizedKey === "ArrowDown") {
         e.preventDefault();
         const dir = normalizedKey === "ArrowLeft" ? "left" : normalizedKey === "ArrowRight" ? "right" : normalizedKey === "ArrowUp" ? "up" : "down";
@@ -161,6 +207,9 @@ export function useTvNavigation() {
         return;
       }
 
+      if (key === "Enter" || key === " ") {
+        const tag = active.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || active.isContentEditable) return;
       // Enter/Space to activate like Netflix remote
       if (normalizedKey === "Enter" || normalizedKey === " ") {
         // Don't break typing in inputs

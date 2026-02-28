@@ -19,10 +19,40 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const streamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
+  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
+  const transcodeStreamUrl = id
+    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1`
+    : "";
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [streamUrl, setStreamUrl] = useState(directStreamUrl);
+
+  useEffect(() => {
+    setStreamUrl(directStreamUrl);
+    setVideoError(null);
+  }, [directStreamUrl]);
+
+  const requestFullscreen = async () => {
+    const v = videoRef.current as HTMLVideoElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (!v) return;
+    if (document.fullscreenElement) return;
+
+    try {
+      if (typeof v.requestFullscreen === "function") {
+        await v.requestFullscreen();
+      } else if (typeof v.webkitRequestFullscreen === "function") {
+        await v.webkitRequestFullscreen();
+      } else if (typeof v.msRequestFullscreen === "function") {
+        await v.msRequestFullscreen();
+      }
+    } catch {
+      // Browsers can reject this if there was no user gesture; ignore safely.
+    }
+  };
 
   const requestFullscreen = async () => {
     const v = videoRef.current as HTMLVideoElement & {
@@ -58,15 +88,13 @@ export default function WatchPage() {
       // Browser often doesn't expose much detail; surface the basic state.
       setVideoError("Video failed to load or is not supported by this browser/codec.");
     };
-
+    const onPause = () => setIsPlaying(false);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
-    v.addEventListener("error", onError);
 
     return () => {
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
-      v.removeEventListener("error", onError);
     };
   }, [streamUrl]);
 
@@ -135,6 +163,13 @@ export default function WatchPage() {
                 playsInline
                 preload="metadata"
                 crossOrigin="anonymous"
+                onError={() => {
+                  if (streamUrl !== transcodeStreamUrl && transcodeStreamUrl) {
+                    setStreamUrl(transcodeStreamUrl);
+                    return;
+                  }
+                  setVideoError("Video/audio format isn't supported by this browser. Tried direct and transcoded playback.");
+                }}
               />
             </div>
 
@@ -155,11 +190,18 @@ export default function WatchPage() {
             <div className="flex items-center gap-2">
               <Button
                 className="focusable gap-2"
-                onClick={() => {
+                onClick={async () => {
                   const v = videoRef.current;
                   if (!v) return;
-                  if (v.paused) v.play();
-                  else v.pause();
+                  if (v.paused) {
+                    // Request fullscreen from the direct user interaction path.
+                    await requestFullscreen();
+                    await v.play().catch(() => {
+                      setVideoError("Playback was blocked by the browser. Try pressing play again.");
+                    });
+                  } else {
+                    v.pause();
+                  }
                 }}
               >
                 {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
