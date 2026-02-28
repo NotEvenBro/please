@@ -19,10 +19,19 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const streamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
+  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
+  const transcodeStreamUrl = id
+    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1`
+    : "";
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [streamUrl, setStreamUrl] = useState(directStreamUrl);
+
+  useEffect(() => {
+    setStreamUrl(directStreamUrl);
+    setVideoError(null);
+  }, [directStreamUrl]);
 
   const requestFullscreen = async () => {
     const v = videoRef.current as HTMLVideoElement & {
@@ -54,19 +63,12 @@ export default function WatchPage() {
       requestFullscreen();
     };
     const onPause = () => setIsPlaying(false);
-    const onError = () => {
-      // Browser often doesn't expose much detail; surface the basic state.
-      setVideoError("Video failed to load or is not supported by this browser/codec.");
-    };
-
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
-    v.addEventListener("error", onError);
 
     return () => {
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
-      v.removeEventListener("error", onError);
     };
   }, [streamUrl]);
 
@@ -135,6 +137,13 @@ export default function WatchPage() {
                 playsInline
                 preload="metadata"
                 crossOrigin="anonymous"
+                onError={() => {
+                  if (streamUrl !== transcodeStreamUrl && transcodeStreamUrl) {
+                    setStreamUrl(transcodeStreamUrl);
+                    return;
+                  }
+                  setVideoError("Video/audio format isn't supported by this browser. Tried direct and transcoded playback.");
+                }}
               />
             </div>
 

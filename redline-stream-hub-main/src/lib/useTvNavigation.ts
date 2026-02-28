@@ -1,0 +1,133 @@
+import { useEffect } from "react";
+
+type Dir = "left" | "right" | "up" | "down";
+
+function normalizeKey(key: string) {
+  return key === "Left"
+    ? "ArrowLeft"
+    : key === "Right"
+    ? "ArrowRight"
+    : key === "Up"
+    ? "ArrowUp"
+    : key === "Down"
+    ? "ArrowDown"
+    : key === "OK" || key === "Select"
+    ? "Enter"
+    : key;
+}
+
+function isFocusable(el: Element): el is HTMLElement {
+  if (!(el instanceof HTMLElement)) return false;
+  if (!el.classList.contains("focusable")) return false;
+  if ((el as HTMLButtonElement).disabled) return false;
+  if (el.getAttribute("aria-disabled") === "true") return false;
+
+  const style = window.getComputedStyle(el);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function center(rect: DOMRect) {
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
+  const cRect = current.getBoundingClientRect();
+  const c = center(cRect);
+
+  const candidates: { el: HTMLElement; score: number }[] = [];
+
+  for (const el of items) {
+    if (el === current) continue;
+    const r = el.getBoundingClientRect();
+    const p = center(r);
+    const dx = p.x - c.x;
+    const dy = p.y - c.y;
+
+    let ok = false;
+    let primary = 0;
+    let secondary = 0;
+
+    if (dir === "left" && dx < -8) {
+      ok = true;
+      primary = Math.abs(dx);
+      secondary = Math.abs(dy);
+    } else if (dir === "right" && dx > 8) {
+      ok = true;
+      primary = Math.abs(dx);
+      secondary = Math.abs(dy);
+    } else if (dir === "up" && dy < -8) {
+      ok = true;
+      primary = Math.abs(dy);
+      secondary = Math.abs(dx);
+    } else if (dir === "down" && dy > 8) {
+      ok = true;
+      primary = Math.abs(dy);
+      secondary = Math.abs(dx);
+    }
+
+    if (!ok) continue;
+    candidates.push({ el, score: primary * 10 + secondary });
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates[0]?.el ?? null;
+}
+
+function getScope(): ParentNode {
+  const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
+  if (openModal) return openModal;
+  return document.querySelector("main") ?? document.body;
+}
+
+function selectOpen() {
+  return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
+}
+
+export function useTvNavigation() {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (selectOpen()) return;
+
+      const key = normalizeKey(e.key);
+      const scope = getScope();
+      const items = Array.from(scope.querySelectorAll(".focusable")).filter(isFocusable);
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (!active || !active.classList.contains("focusable")) {
+        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(key)) {
+          const first = items[0];
+          if (!first) return;
+          e.preventDefault();
+          first.focus();
+          first.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        }
+        return;
+      }
+
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
+        e.preventDefault();
+        const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
+        const next = pickNext(active, dir, items);
+        if (next) {
+          next.focus();
+          next.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        }
+        return;
+      }
+
+      if (key === "Enter" || key === " ") {
+        const tag = active.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || active.isContentEditable) return;
+        e.preventDefault();
+        active.click();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown as EventListener);
+  }, []);
+}
