@@ -141,6 +141,13 @@ function isTextInputElement(el: HTMLElement) {
   return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
+function getAutoFocusTarget(scope: ParentNode, items: HTMLElement[]) {
+  const scoped = scope instanceof HTMLElement || scope instanceof Document ? scope : document;
+  const preferred = scoped.querySelector<HTMLElement>("[data-tv-autofocus='true'].focusable");
+  if (preferred && items.includes(preferred)) return preferred;
+  return items[0] ?? null;
+}
+
 function ensureVisible(el: HTMLElement) {
   const rect = el.getBoundingClientRect();
   const outOfVerticalBounds = rect.top < 0 || rect.bottom > window.innerHeight;
@@ -163,7 +170,7 @@ export function useTvNavigation() {
 
       if (!active || !active.classList.contains("focusable")) {
         if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(key)) {
-          const first = items[0];
+          const first = getAutoFocusTarget(scope, items);
           if (!first) return;
           e.preventDefault();
           first.focus();

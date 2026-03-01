@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
 import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useItem } from "@/hooks/use-jellyfin";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 
 async function tryRequestFullscreen(video: HTMLVideoElement) {
@@ -37,11 +38,11 @@ export default function WatchPage() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const { data: item, isLoading, isError } = useItem(id);
+  const { data: itemDetails, isLoading, isError } = useItem(id);
 
   const media = useMemo(
-    () => (item ? jellyfinToMediaUI(item, { posterWidth: 640, backdropWidth: 1400 }) : null),
-    [item]
+    () => (itemDetails ? jellyfinToMediaUI(itemDetails, { posterWidth: 640, backdropWidth: 1400 }) : null),
+    [itemDetails]
   );
 
   const kind = media?.kind ?? "Movie";
@@ -53,11 +54,36 @@ export default function WatchPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
+  const detailsMeta = itemDetails as ({ SeriesId?: string; SeasonId?: string; Id?: string } & typeof itemDetails) | undefined;
+  const sourceSeriesId = detailsMeta?.SeriesId ?? detailsMeta?.Id;
+  const isSeriesLike = kind === "Series" || kind === "Episode";
+  const seasonsQ = useSeriesSeasons(isSeriesLike ? sourceSeriesId : undefined);
+  const seasons = seasonsQ.data?.Items ?? [];
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
+  const episodesQ = useSeasonEpisodes(selectedSeasonId ?? undefined);
+  const episodes = episodesQ.data?.Items ?? [];
 
   useEffect(() => {
     setStreamUrl(isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
   }, [directStreamUrl, transcodeStreamUrl]);
+
+
+  useEffect(() => {
+    if (!isSeriesLike) {
+      setSelectedSeasonId(null);
+      return;
+    }
+
+    const initialSeasonId = detailsMeta?.SeasonId;
+    if (initialSeasonId && seasons.some((s) => s.Id === initialSeasonId)) {
+      setSelectedSeasonId(initialSeasonId);
+      return;
+    }
+
+    const first = seasons[0]?.Id;
+    if (first) setSelectedSeasonId(first);
+  }, [detailsMeta?.SeasonId, isSeriesLike, seasons]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -181,6 +207,7 @@ export default function WatchPage() {
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-black/35 p-3" data-tv-group="watch-controls">
               <Button
                 className="focusable gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold"
+                data-tv-autofocus="true"
                 onClick={async () => {
                   const v = videoRef.current;
                   if (!v) return;
@@ -236,6 +263,54 @@ export default function WatchPage() {
               </Button>
               <div className="text-xs text-red-100/75">TV mode: Enter toggles play on the video, Back returns to previous page</div>
             </div>
+
+            {isSeriesLike ? (
+              <section className="space-y-3 rounded-2xl border border-primary/20 bg-black/25 p-4" data-tv-group="watch-episodes">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-red-100">Episodes</h2>
+                  <div className="w-48">
+                    <Select value={selectedSeasonId ?? undefined} onValueChange={(v) => setSelectedSeasonId(v)}>
+                      <SelectTrigger className="focusable">
+                        <SelectValue placeholder="Season" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seasons.map((s, idx) => (
+                          <SelectItem key={s.Id} value={s.Id}>
+                            {s.Name || `Season ${idx + 1}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 overflow-x-auto pb-2" data-tv-group="watch-episode-row">
+                  {episodes.map((ep) => {
+                    const epUi = jellyfinToMediaUI(ep, { posterWidth: 420, backdropWidth: 900 });
+                    const epNum = ep.IndexNumber != null ? ep.IndexNumber : undefined;
+                    return (
+                      <button
+                        key={ep.Id}
+                        className="focusable min-w-[260px] max-w-[260px] rounded-xl border border-white/10 bg-black/40 hover:bg-black/60 transition-colors text-left"
+                        data-episode-id={ep.Id}
+                        onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" })}
+                        onClick={() => navigate(`/watch/${ep.Id}`)}
+                        aria-label={`Play ${epUi.title}`}
+                      >
+                        <div className="aspect-video w-full overflow-hidden rounded-t-xl bg-muted">
+                          <img src={epUi.backdropUrl ?? epUi.posterUrl ?? ""} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        </div>
+                        <div className="p-3">
+                          <div className="text-sm font-semibold text-red-50 line-clamp-1">{epNum != null ? `E${epNum}: ` : ""}{epUi.title}</div>
+                          {epUi.description ? <p className="mt-1 text-xs text-red-100/75 line-clamp-2">{epUi.description}</p> : null}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {episodes.length === 0 ? <div className="text-sm text-red-100/70">No episodes found for this season.</div> : null}
+                </div>
+              </section>
+            ) : null}
           </>
         )}
       </div>

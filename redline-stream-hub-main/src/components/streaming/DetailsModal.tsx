@@ -55,6 +55,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
 
   const modalRef = useRef<HTMLDivElement>(null);
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
 
   const { data: itemDetails } = useItem(item?.id);
@@ -103,10 +104,14 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   }, [onClose, navigate, effective?.id, effective?.kind]);
 
   useEffect(() => {
-    if (item) {
-      setTimeout(() => modalRef.current?.focus(), 0);
-    }
-  }, [item]);
+    if (!item) return;
+    setTimeout(() => {
+      primaryActionRef.current?.focus();
+      if (document.activeElement !== primaryActionRef.current) {
+        modalRef.current?.focus();
+      }
+    }, 0);
+  }, [item?.id]);
 
   if (!item || !effective) return null;
 
@@ -186,9 +191,11 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
             <div className="flex items-center gap-3" data-tv-group="details-actions">
               <Button
+                ref={primaryActionRef}
                 className="focusable gap-2 bg-foreground text-background hover:bg-foreground/90 font-bold px-6 py-5 rounded-md"
                 onClick={primaryAction.onClick}
                 aria-label={`${primaryAction.label} ${effective.title}`}
+                data-tv-autofocus="true"
               >
                 <primaryAction.icon className="w-4 h-4 fill-current" />
                 {primaryAction.label}
