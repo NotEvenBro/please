@@ -23,8 +23,8 @@ export default function MoviesPage() {
     const arr = (moviesQ.data?.Items ?? []).map((x) => jellyfinToMediaUI(x));
     arr.sort((a, b) => {
       if (sort === "rating") {
-        const ar = a.rating ?? -1;
-        const br = b.rating ?? -1;
+        const ar = a.userStars ?? (a.rating != null ? a.rating / 2 : -1);
+        const br = b.userStars ?? (b.rating != null ? b.rating / 2 : -1);
         if (br !== ar) return br - ar;
       }
       return a.title.localeCompare(b.title);

@@ -43,6 +43,14 @@ function selectOpen() {
   return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
 }
 
+function focusTopNav() {
+  const firstNav = document.querySelector<HTMLElement>("[data-tv-group='top-nav'] .focusable");
+  if (!firstNav) return false;
+  firstNav.focus();
+  firstNav.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  return true;
+}
+
 function getGroupKey(el: HTMLElement): string {
   const group = el.closest<HTMLElement>("[data-tv-group]");
   if (group?.dataset.tvGroup) return group.dataset.tvGroup;
@@ -141,6 +149,9 @@ export function useTvNavigation() {
         if (next) {
           next.focus();
           ensureVisible(next);
+        } else if (dir === "up" && getScope() === (document.querySelector("main") ?? document.body)) {
+          // If user reached top of page content, move focus into top navigation.
+          focusTopNav();
         }
         return;
       }
