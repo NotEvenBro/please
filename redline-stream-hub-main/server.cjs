@@ -430,19 +430,26 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
   const playSessionId = (req.query.playSessionId || '').toString(); // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
 
-  const shouldTranscodeForAudioCompatibility = (mediaSource) => {
+  const shouldTranscodeForCompatibility = (mediaSource) => {
     if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
 
     // Common codecs typically supported by TV browsers/Chromium builds.
-    // If source audio codec is outside this set, prefer transcoding to avoid silent playback.
-    const supportedAudioCodecs = new Set(['aac', 'mp3', 'opus', 'vorbis']);
-    const audioStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'audio');
-    if (!audioStreams.length) return false;
+    const supportedAudioCodecs = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
+    const unsupportedVideoCodecs = new Set(['hevc', 'h265', 'x265', 'av1']);
 
-    return audioStreams.some((s) => {
+    const audioStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'audio');
+    const hasUnsupportedAudio = audioStreams.some((s) => {
       const codec = String(s?.Codec || '').toLowerCase();
       return codec && !supportedAudioCodecs.has(codec);
     });
+
+    const videoStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'video');
+    const hasUnsupportedVideo = videoStreams.some((s) => {
+      const codec = String(s?.Codec || '').toLowerCase();
+      return codec && unsupportedVideoCodecs.has(codec);
+    });
+
+    return hasUnsupportedAudio || hasUnsupportedVideo;
   };
   if (!mediaSourceId) {
     // Fallback: fetch PlaybackInfo to discover MediaSourceId
@@ -502,7 +509,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
       const kind = (req.query.kind || '').toString().toLowerCase();
       const isAudio = kind === 'track' || kind === 'audio';
 
-      if ((preferTranscode || shouldTranscodeForAudioCompatibility(source)) && !isAudio) {
+      if ((preferTranscode || shouldTranscodeForCompatibility(source)) && !isAudio) {
         const transcodingUrl = source.TranscodingUrl;
         if (transcodingUrl) {
           console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
@@ -571,7 +578,7 @@ const kind = (req.query.kind || '').toString().toLowerCase();
         info &&
         info.MediaSources &&
         info.MediaSources[0] &&
-        (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForAudioCompatibility(info.MediaSources[0])))
+        (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForCompatibility(info.MediaSources[0])))
       ) {
         console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
         return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);

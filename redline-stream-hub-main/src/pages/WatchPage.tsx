@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
-import { ExternalLink, Loader2, AlertCircle, Play, Pause } from "lucide-react";
+import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useItem } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
@@ -26,6 +26,12 @@ async function tryRequestFullscreen(video: HTMLVideoElement) {
   }
 }
 
+function isLikelyTvDevice() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return /smart-tv|smarttv|tizen|webos|appletv|hbbtv|aft|googletv|bravia|viera|roku|crkey|tv/.test(ua);
+}
+
 export default function WatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -46,12 +52,12 @@ export default function WatchPage() {
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [streamUrl, setStreamUrl] = useState(directStreamUrl);
+  const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
 
   useEffect(() => {
-    setStreamUrl(directStreamUrl);
+    setStreamUrl(isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
-  }, [directStreamUrl]);
+  }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -129,12 +135,26 @@ export default function WatchPage() {
             <div className="rounded-2xl overflow-hidden border border-primary/35 bg-black shadow-[0_0_50px_rgba(220,38,38,0.28)]">
               <video
                 ref={videoRef}
-                className="w-full max-h-[70vh] bg-black"
+                className="focusable w-full max-h-[70vh] bg-black outline-none focus-visible:ring-4 focus-visible:ring-red-500/70"
                 src={streamUrl}
-                controls
+                controls={false}
+                tabIndex={0}
                 playsInline
                 preload="metadata"
                 crossOrigin="anonymous"
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    const v = videoRef.current;
+                    if (!v) return;
+                    if (v.paused) {
+                      await tryRequestFullscreen(v);
+                      await v.play().catch(() => setVideoError("Playback was blocked by the browser. Try pressing play again."));
+                    } else {
+                      v.pause();
+                    }
+                  }
+                }}
                 onError={() => {
                   if (streamUrl !== transcodeStreamUrl && transcodeStreamUrl) {
                     setStreamUrl(transcodeStreamUrl);
@@ -152,14 +172,13 @@ export default function WatchPage() {
                   <span className="font-semibold">{videoError}</span>
                 </div>
                 <div className="text-sm text-muted-foreground mt-2">
-                  If this is an HEVC/H.265 file, Chrome may show a black screen unless HEVC support is installed. Try Edge,
-                  install HEVC Video Extensions, or enable Jellyfin transcoding.
+                  If this is an HEVC/H.265 source, browser-side playback may fail. Compatibility mode forces server transcoding for both video and audio, which is recommended on TV devices.
                 </div>
               </div>
             ) : null}
 
             {/* Simple TV-friendly play/pause */}
-            <div className="flex items-center gap-3 rounded-xl border border-primary/25 bg-black/35 p-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-black/35 p-3" data-tv-group="watch-controls">
               <Button
                 className="focusable gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold"
                 onClick={async () => {
@@ -191,7 +210,31 @@ export default function WatchPage() {
                   Audio issues? Compatibility mode
                 </Button>
               ) : null}
-              <div className="text-xs text-red-100/75">TV mode: press Play to auto-enter fullscreen</div>
+              {streamUrl !== directStreamUrl ? (
+                <Button
+                  variant="outline"
+                  className="focusable border-red-400/40 bg-black/40 text-red-100 hover:bg-red-950/50"
+                  onClick={() => {
+                    setStreamUrl(directStreamUrl);
+                    setVideoError(null);
+                  }}
+                >
+                  Use direct stream
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50"
+                onClick={async () => {
+                  const v = videoRef.current;
+                  if (!v) return;
+                  await tryRequestFullscreen(v);
+                }}
+              >
+                <Maximize className="w-4 h-4 mr-2" />
+                Fullscreen
+              </Button>
+              <div className="text-xs text-red-100/75">TV mode: Enter toggles play on the video, Back returns to previous page</div>
             </div>
           </>
         )}
