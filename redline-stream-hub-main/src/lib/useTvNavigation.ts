@@ -33,9 +33,30 @@ function center(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
+function getScope(): ParentNode {
+  const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
+  if (openModal) return openModal;
+  return document.querySelector("main") ?? document.body;
+}
+
+function selectOpen() {
+  return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
+}
+
+function getGroupKey(el: HTMLElement): string {
+  const group = el.closest<HTMLElement>("[data-tv-group]");
+  if (group?.dataset.tvGroup) return group.dataset.tvGroup;
+
+  const rail = el.closest<HTMLElement>(".rail-scroll");
+  if (rail) return "rail-scroll";
+
+  return "default";
+}
+
 function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
   const cRect = current.getBoundingClientRect();
   const c = center(cRect);
+  const currentGroup = getGroupKey(current);
 
   const candidates: { el: HTMLElement; score: number }[] = [];
 
@@ -69,21 +90,26 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
     }
 
     if (!ok) continue;
-    candidates.push({ el, score: primary * 10 + secondary });
+
+    // Keep focus movement local for smoother TV UX.
+    const sameGroup = getGroupKey(el) === currentGroup;
+    const groupPenalty = sameGroup ? 0 : (dir === "left" || dir === "right" ? 240 : 45);
+    const score = primary * 10 + secondary + groupPenalty;
+
+    candidates.push({ el, score });
   }
 
   candidates.sort((a, b) => a.score - b.score);
   return candidates[0]?.el ?? null;
 }
 
-function getScope(): ParentNode {
-  const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
-  if (openModal) return openModal;
-  return document.querySelector("main") ?? document.body;
-}
+function ensureVisible(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  const outOfVerticalBounds = rect.top < 0 || rect.bottom > window.innerHeight;
+  const outOfHorizontalBounds = rect.left < 0 || rect.right > window.innerWidth;
+  if (!outOfVerticalBounds && !outOfHorizontalBounds) return;
 
-function selectOpen() {
-  return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
 }
 
 export function useTvNavigation() {
@@ -103,7 +129,7 @@ export function useTvNavigation() {
           if (!first) return;
           e.preventDefault();
           first.focus();
-          first.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          ensureVisible(first);
         }
         return;
       }
@@ -114,7 +140,7 @@ export function useTvNavigation() {
         const next = pickNext(active, dir, items);
         if (next) {
           next.focus();
-          next.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          ensureVisible(next);
         }
         return;
       }

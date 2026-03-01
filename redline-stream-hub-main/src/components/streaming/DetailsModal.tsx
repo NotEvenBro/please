@@ -319,6 +319,15 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                       key={ep.Id}
                       className="w-full text-left focusable rounded-md bg-background/30 hover:bg-background/40 transition-colors p-3 flex gap-3 items-center"
                       onClick={() => navigate(`/watch/${ep.Id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+                      }}
                       aria-label={`Play ${ui.title}`}
                     >
                       <div className="w-36 flex-none rounded overflow-hidden bg-muted" style={{ aspectRatio: "16/9" }}>
