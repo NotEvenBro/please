@@ -319,9 +319,19 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                       key={ep.Id}
                       className="w-full text-left focusable rounded-md bg-background/30 hover:bg-background/40 transition-colors p-3 flex gap-3 items-center"
                       onClick={() => navigate(`/watch/${ep.Id}`)}
+                      data-episode-id={ep.Id}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
+                        const key = e.key;
+                        if (key === "Enter" || key === " " || key === "Select" || key === "OK") {
                           e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
+                      onKeyUp={(e) => {
+                        if (e.code === "NumpadEnter") {
+                          e.preventDefault();
+                          e.stopPropagation();
                           navigate(`/watch/${ep.Id}`);
                         }
                       }}

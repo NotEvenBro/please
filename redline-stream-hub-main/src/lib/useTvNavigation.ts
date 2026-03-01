@@ -2,7 +2,13 @@ import { useEffect } from "react";
 
 type Dir = "left" | "right" | "up" | "down";
 
-function normalizeKey(key: string) {
+function normalizeKey(key: string, code?: string, keyCode?: number) {
+  if (code === "NumpadEnter" || keyCode === 13) return "Enter";
+  if (keyCode === 37) return "ArrowLeft";
+  if (keyCode === 38) return "ArrowUp";
+  if (keyCode === 39) return "ArrowRight";
+  if (keyCode === 40) return "ArrowDown";
+
   return key === "Left"
     ? "ArrowLeft"
     : key === "Right"
@@ -126,7 +132,7 @@ export function useTvNavigation() {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;
 
-      const key = normalizeKey(e.key);
+      const key = normalizeKey(e.key, e.code, e.keyCode);
       const scope = getScope();
       const items = Array.from(scope.querySelectorAll(".focusable")).filter(isFocusable);
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
