@@ -67,6 +67,12 @@ function getGroupKey(el: HTMLElement): string {
   return "default";
 }
 
+function getEpisodeButton(el: HTMLElement | null): HTMLButtonElement | null {
+  if (!el) return null;
+  if (el instanceof HTMLButtonElement && el.dataset.episodeId) return el;
+  return el.closest("button[data-episode-id]");
+}
+
 function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
   const cRect = current.getBoundingClientRect();
   const c = center(cRect);
@@ -151,7 +157,15 @@ export function useTvNavigation() {
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
         e.preventDefault();
         const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
-        const next = pickNext(active, dir, items);
+        const activeGroup = getGroupKey(active);
+
+        // Keep horizontal focus locked within top nav so it doesn't spill into content.
+        const directionalPool =
+          activeGroup === "top-nav" && (dir === "left" || dir === "right")
+            ? items.filter((x) => getGroupKey(x) === "top-nav")
+            : items;
+
+        const next = pickNext(active, dir, directionalPool);
         if (next) {
           next.focus();
           ensureVisible(next);
@@ -163,6 +177,13 @@ export function useTvNavigation() {
       }
 
       if (key === "Enter" || key === " ") {
+        const episodeBtn = getEpisodeButton(active);
+        if (episodeBtn) {
+          e.preventDefault();
+          episodeBtn.click();
+          return;
+        }
+
         const tag = active.tagName.toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select" || active.isContentEditable) return;
         e.preventDefault();
