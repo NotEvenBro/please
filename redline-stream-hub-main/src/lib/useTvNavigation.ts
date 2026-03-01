@@ -76,6 +76,16 @@ function getEpisodeButton(el: HTMLElement | null): HTMLButtonElement | null {
   return el.closest("button[data-episode-id]");
 }
 
+function getTopNavItems(items: HTMLElement[]) {
+  return items.filter((x) => getGroupKey(x) === "top-nav");
+}
+
+function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  return edge === "first" ? sorted[0] : sorted[sorted.length - 1];
+}
+
 function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
   const cRect = current.getBoundingClientRect();
   const c = center(cRect);
@@ -177,13 +187,20 @@ export function useTvNavigation() {
         // Keep horizontal focus locked within top nav so it doesn't spill into content.
         const directionalPool =
           activeGroup === "top-nav" && (dir === "left" || dir === "right")
-            ? items.filter((x) => getGroupKey(x) === "top-nav")
+            ? getTopNavItems(items)
             : items;
 
         const next = pickNext(active, dir, directionalPool);
         if (next) {
           next.focus();
           ensureVisible(next);
+        } else if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
+          // Wrap within top nav for seamless left/right remote movement.
+          const edge = pickTopNavEdge(directionalPool, dir === "left" ? "last" : "first");
+          if (edge) {
+            edge.focus();
+            ensureVisible(edge);
+          }
         } else if (dir === "up" && getScope() === (document.querySelector("main") ?? document.body)) {
           // If user reached top of page content, move focus into top navigation.
           focusTopNav();
