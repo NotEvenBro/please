@@ -428,6 +428,29 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
   const id = encodeURIComponent(req.params.id);
   const mediaSourceId = (req.query.mediaSourceId || '').toString();
   const playSessionId = (req.query.playSessionId || '').toString(); // optional
+  const preferTranscode = String(req.query.preferTranscode || '') === '1';
+
+  const shouldTranscodeForCompatibility = (mediaSource) => {
+    if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
+
+    // Common codecs typically supported by TV browsers/Chromium builds.
+    const supportedAudioCodecs = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
+    const unsupportedVideoCodecs = new Set(['hevc', 'h265', 'x265', 'av1']);
+
+    const audioStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'audio');
+    const hasUnsupportedAudio = audioStreams.some((s) => {
+      const codec = String(s?.Codec || '').toLowerCase();
+      return codec && !supportedAudioCodecs.has(codec);
+    });
+
+    const videoStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'video');
+    const hasUnsupportedVideo = videoStreams.some((s) => {
+      const codec = String(s?.Codec || '').toLowerCase();
+      return codec && unsupportedVideoCodecs.has(codec);
+    });
+
+    return hasUnsupportedAudio || hasUnsupportedVideo;
+  };
   if (!mediaSourceId) {
     // Fallback: fetch PlaybackInfo to discover MediaSourceId
     try {
@@ -435,7 +458,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({});
+      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
       // Use proxyJellyfinRequest-style call but inline so we can parse JSON
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
@@ -477,13 +500,22 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         return res.status(502).json({ error: 'PlaybackInfo returned no MediaSources' });
       }
 
-      const discovered = info.json.MediaSources[0].Id;
+      const source = info.json.MediaSources[0];
+      const discovered = source.Id;
       const discoveredSession = info.json.PlaySessionId || '';
       console.log('[Stream] Discovered mediaSourceId via PlaybackInfo', discovered);
 
       // Continue with discovered IDs
       const kind = (req.query.kind || '').toString().toLowerCase();
       const isAudio = kind === 'track' || kind === 'audio';
+
+      if ((preferTranscode || shouldTranscodeForCompatibility(source)) && !isAudio) {
+        const transcodingUrl = source.TranscodingUrl;
+        if (transcodingUrl) {
+          console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
+          return proxyJellyfinStream(transcodingUrl, req, res);
+        }
+      }
 
       let p =
         `/${isAudio ? 'Audio' : 'Videos'}/${id}/stream` +
@@ -500,6 +532,61 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
 
 const kind = (req.query.kind || '').toString().toLowerCase();
   const isAudio = kind === 'track' || kind === 'audio';
+
+  if (!isAudio) {
+    try {
+      const qs =
+        `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
+        `&IsPlayback=true&AutoOpenLiveStream=true`;
+
+      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
+      const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
+      const mod = url.protocol === 'https:' ? https : http;
+      const headers = {
+        'X-Emby-Token': config.jellyfinApiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      };
+
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers,
+      };
+
+      const info = await new Promise((resolve, reject) => {
+        const r = mod.request(options, (pr) => {
+          let data = '';
+          pr.on('data', (c) => (data += c));
+          pr.on('end', () => {
+            try {
+              resolve(data ? JSON.parse(data) : null);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        r.on('error', reject);
+        r.write(body);
+        r.end();
+      });
+
+      if (
+        info &&
+        info.MediaSources &&
+        info.MediaSources[0] &&
+        (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForCompatibility(info.MediaSources[0])))
+      ) {
+        console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
+        return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
+      }
+    } catch (e) {
+      console.error('[Stream] compatibility fallback failed', e?.message || e);
+    }
+  }
 
   let p =
     `/${isAudio ? 'Audio' : 'Videos'}/${id}/stream` +
