@@ -191,6 +191,25 @@ function proxyJellyfinRequest(jellyfinPath, req, res, method = 'POST', body = nu
 }
 
 
+
+const transcodeSessionBasePath = new Map();
+
+function rememberTranscodePath(transcodingUrl, playSessionId, mediaSourceId) {
+  if (!transcodingUrl) return;
+  const asUrl = new URL(transcodingUrl, config.jellyfinBaseUrl);
+  const basePath = asUrl.pathname.replace(/[^/]*$/, '');
+  if (playSessionId) transcodeSessionBasePath.set(`session:${playSessionId}`, basePath);
+  if (mediaSourceId) transcodeSessionBasePath.set(`source:${mediaSourceId}`, basePath);
+}
+
+function resolveTranscodeArtifactPath(fileName, playSessionId, mediaSourceId) {
+  const bySession = playSessionId ? transcodeSessionBasePath.get(`session:${playSessionId}`) : null;
+  const bySource = mediaSourceId ? transcodeSessionBasePath.get(`source:${mediaSourceId}`) : null;
+  const base = bySession || bySource || (mediaSourceId ? `/Videos/${encodeURIComponent(mediaSourceId)}/` : null);
+  if (!base) return null;
+  return `${base}${encodeURIComponent(fileName)}`;
+}
+
 // --- Jellyfin stream proxy helper (GET + Range support) ---
 function proxyJellyfinStream(jellyfinPath, req, res) {
   if (!config.jellyfinBaseUrl || !config.jellyfinApiKey || !config.jellyfinUserId) {
@@ -430,6 +449,31 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
   const playSessionId = (req.query.playSessionId || '').toString(); // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
 
+  const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(req.params.id);
+  if (isTranscodeArtifact) {
+    const playSession = (req.query.PlaySessionId || req.query.playSessionId || '').toString();
+    const sourceId = (req.query.MediaSourceId || req.query.mediaSourceId || '').toString();
+    const targetPath = resolveTranscodeArtifactPath(req.params.id, playSession, sourceId);
+    if (!targetPath) {
+      return res.status(502).json({ error: 'Transcode session context missing', details: 'No base path found for transcode artifact request' });
+    }
+
+    const passthrough = new URLSearchParams();
+    for (const [k, v] of Object.entries(req.query)) {
+      if (v == null) continue;
+      if (k === 'kind' || k === 'preferTranscode') continue;
+      if (Array.isArray(v)) {
+        for (const each of v) passthrough.append(k, String(each));
+      } else {
+        passthrough.set(k, String(v));
+      }
+    }
+
+    const withQs = passthrough.toString();
+    const artifactUrl = withQs ? `${targetPath}?${withQs}` : targetPath;
+    return proxyJellyfinStream(artifactUrl, req, res);
+  }
+
   const shouldTranscodeForCompatibility = (mediaSource) => {
     if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
 
@@ -513,6 +557,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         const transcodingUrl = source.TranscodingUrl;
         if (transcodingUrl) {
           console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
+          rememberTranscodePath(transcodingUrl, discoveredSession, source.Id);
           return proxyJellyfinStream(transcodingUrl, req, res);
         }
       }
@@ -581,6 +626,7 @@ const kind = (req.query.kind || '').toString().toLowerCase();
         (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForCompatibility(info.MediaSources[0])))
       ) {
         console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
+        rememberTranscodePath(info.MediaSources[0].TranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
         return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
       }
     } catch (e) {
