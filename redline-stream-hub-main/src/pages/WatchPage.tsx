@@ -38,6 +38,7 @@ export default function WatchPage() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
+  const hlsRef = useRef<any>(null);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -103,6 +104,73 @@ export default function WatchPage() {
     const first = seasons[0]?.Id;
     if (first) setSelectedSeasonId(first);
   }, [detailsMeta?.SeasonId, isSeriesLike, seasons]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    let cancelled = false;
+
+    const cleanup = () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      v.src = "";
+      v.load();
+    };
+
+    const setup = async () => {
+      const shouldUseHls = streamUrl.includes("preferTranscode=1");
+      if (!shouldUseHls) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+        v.src = streamUrl;
+        return;
+      }
+
+      try {
+        const mod = await import("hls.js");
+        const Hls = mod.default;
+        if (cancelled) return;
+
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+          });
+          hlsRef.current = hls;
+          hls.attachMedia(v);
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            hls.loadSource(streamUrl);
+          });
+          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean }) => {
+            if (data?.fatal) {
+              setVideoError("Compatibility stream failed to load. Try switching stream mode.");
+            }
+          });
+          return;
+        }
+
+        if (v.canPlayType("application/vnd.apple.mpegurl")) {
+          v.src = streamUrl;
+          return;
+        }
+
+        setVideoError("This browser cannot play HLS compatibility streams.");
+      } catch {
+        setVideoError("Failed to initialize HLS playback.");
+      }
+    };
+
+    void setup();
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [streamUrl]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -181,7 +249,6 @@ export default function WatchPage() {
               <video
                 ref={videoRef}
                 className="w-full max-h-[70vh] bg-black"
-                src={streamUrl}
                 controls={false}
                 playsInline
                 preload="metadata"
