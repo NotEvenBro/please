@@ -458,7 +458,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({});
+      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
       // Use proxyJellyfinRequest-style call but inline so we can parse JSON
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
@@ -539,7 +539,7 @@ const kind = (req.query.kind || '').toString().toLowerCase();
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({});
+      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
       const headers = {
