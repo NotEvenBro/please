@@ -656,11 +656,13 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
           let data = '';
           pr.on('data', (c) => (data += c));
           pr.on('end', () => {
+            let parsed = null;
             try {
-              resolve({ status: pr.statusCode || 200, json: data ? JSON.parse(data) : null });
-            } catch (e) {
-              reject(e);
+              parsed = data ? JSON.parse(data) : null;
+            } catch {
+              // Jellyfin may return text/plain errors; keep raw for diagnostics.
             }
+            resolve({ status: pr.statusCode || 200, json: parsed, raw: data || '' });
           });
         });
         r.on('error', reject);
@@ -669,8 +671,11 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
       });
 
       if (!info.json || !info.json.MediaSources || !info.json.MediaSources[0] || !info.json.MediaSources[0].Id) {
-        console.error('[Stream] Fallback PlaybackInfo missing MediaSources');
-        return res.status(502).json({ error: 'PlaybackInfo returned no MediaSources' });
+        console.error('[Stream] Fallback PlaybackInfo missing MediaSources', 'status', info.status, 'raw', String(info.raw || '').slice(0, 220));
+        const fallbackKind = (req.query.kind || '').toString().toLowerCase();
+        const isAudioFallback = fallbackKind === 'track' || fallbackKind === 'audio';
+        const fallbackPath = `/${isAudioFallback ? 'Audio' : 'Videos'}/${id}/stream?static=true`;
+        return proxyJellyfinStream(fallbackPath, req, res);
       }
 
       const source = info.json.MediaSources[0];
@@ -701,7 +706,10 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
       return proxyJellyfinStream(p, req, res);
     } catch (e) {
       console.error('[Stream] Fallback PlaybackInfo failed', e?.message || e);
-      return res.status(502).json({ error: 'Fallback PlaybackInfo failed', details: String(e?.message || e) });
+      const fallbackKind = (req.query.kind || '').toString().toLowerCase();
+      const isAudioFallback = fallbackKind === 'track' || fallbackKind === 'audio';
+      const fallbackPath = `/${isAudioFallback ? 'Audio' : 'Videos'}/${id}/stream?static=true`;
+      return proxyJellyfinStream(fallbackPath, req, res);
     }
   }
 

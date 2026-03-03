@@ -160,6 +160,13 @@ export default function WatchPage() {
               .join(' | ');
             if (detail) setHlsDebug(detail);
             if (data?.fatal) {
+              const httpCode = data?.response?.code;
+              if (httpCode === 504 && streamUrl !== directStreamUrl) {
+                // If HLS manifest times out, fall back to direct stream once.
+                setStreamUrl(directStreamUrl);
+                setVideoError("Compatibility manifest timed out. Falling back to direct stream.");
+                return;
+              }
               setVideoError("Compatibility stream failed to load. Try switching stream mode.");
             }
           });
