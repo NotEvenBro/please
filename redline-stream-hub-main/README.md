@@ -97,3 +97,25 @@ Usually no. It may improve remote-control UX in some apps, but it will not fix s
 - Keep the current HLS playback path (`hls.js`) for browser compatibility.
 - Tune quality in Jellyfin server settings (bitrate caps + hardware acceleration) rather than replacing the frontend player library.
 - Use direct play whenever possible, and only enable compatibility transcode for devices/codecs that need it.
+
+### Should we build separate TV and PC frontends?
+
+Short answer: **usually no at first**, unless your product goals and team capacity justify the maintenance overhead.
+
+A better default is a **shared codebase** with mode-specific UX layers:
+
+- Shared data/API/auth/playback plumbing.
+- TV-focused input/focus layer (remote navigation + bigger hit targets).
+- PC-focused interaction layer (mouse hover, dense controls, keyboard shortcuts).
+
+When a split *does* make sense:
+
+- TV app needs a very different app shell/navigation model that keeps diverging.
+- Performance constraints on low-power TV browsers require aggressively simplified UI bundles.
+- You need platform-specific integrations (TV OS APIs, store packaging, DRM differences).
+
+Recommended path for this project:
+
+1. Keep one frontend for now and continue hardening TV mode (which is already underway).
+2. Isolate TV-specific UI/logic behind feature flags/routes/components.
+3. Re-evaluate a hard split only if velocity slows due to constant cross-platform compromises.
