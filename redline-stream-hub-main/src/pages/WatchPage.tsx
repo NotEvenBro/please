@@ -39,6 +39,7 @@ export default function WatchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
   const hlsRef = useRef<any>(null);
+  const autoFallbackRef = useRef({ manifestToDirectDone: false, directToTranscodeDone: false });
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -78,6 +79,7 @@ export default function WatchPage() {
   useEffect(() => {
     setSelectedSubtitleTrack("0");
     setSubtitleOptions([{ value: "off", label: "Off" }]);
+    autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
   }, [id]);
 
   useEffect(() => {
@@ -163,10 +165,11 @@ export default function WatchPage() {
             if (detail) setHlsDebug(detail);
             if (data?.fatal) {
               const httpCode = data?.response?.code;
-              if (httpCode === 504 && streamUrl !== directStreamUrl) {
-                // If HLS manifest times out, fall back to direct stream once.
+              const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(String(data?.details || ""));
+              if ((httpCode === 504 || isManifestNetworkFailure) && streamUrl !== directStreamUrl && !autoFallbackRef.current.manifestToDirectDone) {
+                autoFallbackRef.current.manifestToDirectDone = true;
                 setStreamUrl(directStreamUrl);
-                setVideoError("Compatibility manifest timed out. Falling back to direct stream.");
+                setVideoError("Compatibility HLS manifest failed to load on this device. Falling back to direct stream.");
                 return;
               }
               setVideoError("Compatibility stream failed to load. Try switching stream mode.");
@@ -314,7 +317,9 @@ export default function WatchPage() {
                 preload="metadata"
                 crossOrigin="anonymous"
                 onError={() => {
-                  if (streamUrl !== transcodeStreamUrl && transcodeStreamUrl) {
+                  const cameFromManifestFallback = streamUrl === directStreamUrl && autoFallbackRef.current.manifestToDirectDone;
+                  if (!cameFromManifestFallback && streamUrl !== transcodeStreamUrl && transcodeStreamUrl && !autoFallbackRef.current.directToTranscodeDone) {
+                    autoFallbackRef.current.directToTranscodeDone = true;
                     setStreamUrl(transcodeStreamUrl);
                     return;
                   }
