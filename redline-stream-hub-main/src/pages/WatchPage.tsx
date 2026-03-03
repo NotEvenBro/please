@@ -54,6 +54,7 @@ export default function WatchPage() {
     : "";
 
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [hlsDebug, setHlsDebug] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
   const detailsMeta = itemDetails as ({ SeriesId?: string; SeasonId?: string; Id?: string } & typeof itemDetails) | undefined;
@@ -68,6 +69,7 @@ export default function WatchPage() {
   useEffect(() => {
     setStreamUrl(isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
+    setHlsDebug(null);
   }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
@@ -146,7 +148,11 @@ export default function WatchPage() {
           hls.on(Hls.Events.MEDIA_ATTACHED, () => {
             hls.loadSource(streamUrl);
           });
-          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean }) => {
+          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean; type?: string; details?: string; response?: { code?: number; text?: string } }) => {
+            const detail = [data?.type, data?.details, data?.response?.code ? `HTTP:${data.response.code}` : null]
+              .filter(Boolean)
+              .join(' | ');
+            if (detail) setHlsDebug(detail);
             if (data?.fatal) {
               setVideoError("Compatibility stream failed to load. Try switching stream mode.");
             }
@@ -272,6 +278,12 @@ export default function WatchPage() {
                 <div className="text-sm text-muted-foreground mt-2">
                   If this is an HEVC/H.265 source, browser-side playback may fail. Compatibility mode forces server transcoding for both video and audio, which is recommended on TV devices.
                 </div>
+              </div>
+            ) : null}
+
+            {hlsDebug ? (
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-950/20 p-3 text-xs text-yellow-200">
+                HLS debug: {hlsDebug}
               </div>
             ) : null}
 

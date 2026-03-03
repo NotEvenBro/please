@@ -551,10 +551,12 @@ app.get('/api/jellyfin/transcode-debug/:id', async (req, res) => {
 
 // Direct stream (same-origin) + Range support
 app.get('/api/jellyfin/stream/:id', async (req, res) => {
-  console.log('[Stream]', req.params.id, 'mediaSourceId', req.query.mediaSourceId, 'playSessionId', req.query.playSessionId, 'kind', req.query.kind);
+  const normalizedMediaSourceId = (req.query.mediaSourceId || req.query.MediaSourceId || '').toString();
+  const normalizedPlaySessionId = (req.query.playSessionId || req.query.PlaySessionId || '').toString();
+  console.log('[Stream]', req.params.id, 'mediaSourceId', normalizedMediaSourceId || '-', 'playSessionId', normalizedPlaySessionId || '-', 'kind', req.query.kind || '-', 'url', req.originalUrl);
   const id = encodeURIComponent(req.params.id);
-  const mediaSourceId = (req.query.mediaSourceId || '').toString();
-  const playSessionId = (req.query.playSessionId || '').toString(); // optional
+  const mediaSourceId = normalizedMediaSourceId;
+  const playSessionId = normalizedPlaySessionId; // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
 
   const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(req.params.id);
@@ -579,6 +581,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
 
     const withQs = passthrough.toString();
     const artifactUrl = withQs ? `${targetPath}?${withQs}` : targetPath;
+    console.log('[Stream Artifact]', req.params.id, '=>', artifactUrl);
     return proxyJellyfinStream(artifactUrl, req, res);
   }
 
