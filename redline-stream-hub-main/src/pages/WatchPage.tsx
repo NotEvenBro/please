@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
-import { ExternalLink, Loader2, AlertCircle } from "lucide-react";
+import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize, Minimize, RotateCcw, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
@@ -12,7 +12,6 @@ async function tryRequestFullscreen(video: HTMLVideoElement) {
     webkitRequestFullscreen?: () => Promise<void> | void;
     msRequestFullscreen?: () => Promise<void> | void;
   };
-  if (document.fullscreenElement) return;
 
   try {
     if (typeof v.requestFullscreen === "function") {
@@ -23,7 +22,30 @@ async function tryRequestFullscreen(video: HTMLVideoElement) {
       await v.msRequestFullscreen();
     }
   } catch {
-    // Browsers can reject this if there was no user gesture; ignore safely.
+    // Ignore: browsers can reject fullscreen without a valid gesture.
+  }
+}
+
+async function tryExitFullscreen() {
+  const doc = document as Document & {
+    webkitExitFullscreen?: () => Promise<void> | void;
+    msExitFullscreen?: () => Promise<void> | void;
+  };
+
+  try {
+    if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
+      await document.exitFullscreen();
+      return;
+    }
+    if (typeof doc.webkitExitFullscreen === "function") {
+      await doc.webkitExitFullscreen();
+      return;
+    }
+    if (typeof doc.msExitFullscreen === "function") {
+      await doc.msExitFullscreen();
+    }
+  } catch {
+    // Ignore fullscreen exit failures.
   }
 }
 
@@ -33,12 +55,16 @@ function isLikelyTvDevice() {
   return /smart-tv|smarttv|tizen|webos|appletv|hbbtv|aft|googletv|bravia|viera|roku|crkey|tv/.test(ua);
 }
 
+const REMOTE_BACK_KEYS = new Set(["Escape", "BrowserBack", "Backspace", "GoBack", "XF86Back"]);
+const REMOTE_BACK_CODES = new Set([8, 27, 461, 10009, 166]);
+
 export default function WatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const autoFallbackRef = useRef({ manifestToDirectDone: false, directToTranscodeDone: false });
+  const hideChromeTimerRef = useRef<number | null>(null);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -56,6 +82,12 @@ export default function WatchPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hlsDebug, setHlsDebug] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
   const detailsMeta = itemDetails as ({ SeriesId?: string; SeasonId?: string; Id?: string } & typeof itemDetails) | undefined;
   const sourceSeriesId = detailsMeta?.SeriesId ?? detailsMeta?.Id;
   const isSeriesLike = kind === "Series" || kind === "Episode";
@@ -65,6 +97,62 @@ export default function WatchPage() {
   const episodesQ = useSeasonEpisodes(selectedSeasonId ?? undefined);
   const episodes = episodesQ.data?.Items ?? [];
 
+  const clearHideControlsTimer = () => {
+    if (hideChromeTimerRef.current != null) {
+      window.clearTimeout(hideChromeTimerRef.current);
+      hideChromeTimerRef.current = null;
+    }
+  };
+
+  const scheduleControlsHide = () => {
+    clearHideControlsTimer();
+    if (!isPlaying) return;
+    hideChromeTimerRef.current = window.setTimeout(() => {
+      setShowControls(false);
+    }, 2800);
+  };
+
+  const showControlsNow = () => {
+    setShowControls(true);
+    scheduleControlsHide();
+  };
+
+  const togglePlayPause = async () => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (v.paused) {
+      showControlsNow();
+      await tryRequestFullscreen(v);
+      await v.play().catch(() => {
+        setVideoError("Playback was blocked by the browser. Try pressing play again.");
+      });
+      return;
+    }
+
+    v.pause();
+    showControlsNow();
+  };
+
+  const seekBy = (seconds: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const safeDuration = Number.isFinite(v.duration) ? v.duration : 0;
+    const nextTime = Math.max(0, Math.min(safeDuration || Number.MAX_SAFE_INTEGER, v.currentTime + seconds));
+    v.currentTime = nextTime;
+    showControlsNow();
+  };
+
+  const formatTime = (seconds: number) => {
+    if (!Number.isFinite(seconds)) return "0:00";
+    const s = Math.floor(seconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
   useEffect(() => {
     setStreamUrl(isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
@@ -73,6 +161,9 @@ export default function WatchPage() {
 
   useEffect(() => {
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
+    setShowControls(true);
+    setCurrentTime(0);
+    setDuration(0);
   }, [id]);
 
   useEffect(() => {
@@ -132,11 +223,12 @@ export default function WatchPage() {
           hls.on(Hls.Events.MEDIA_ATTACHED, () => {
             hls.loadSource(streamUrl);
           });
-          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean; type?: string; details?: string; response?: { code?: number; text?: string } }) => {
+          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean; type?: string; details?: string; response?: { code?: number } }) => {
             const detail = [data?.type, data?.details, data?.response?.code ? `HTTP:${data.response.code}` : null]
               .filter(Boolean)
-              .join(' | ');
+              .join(" | ");
             if (detail) setHlsDebug(detail);
+
             if (data?.fatal) {
               const httpCode = data?.response?.code;
               const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(String(data?.details || ""));
@@ -168,22 +260,72 @@ export default function WatchPage() {
       cancelled = true;
       cleanup();
     };
-  }, [streamUrl]);
+  }, [streamUrl, directStreamUrl]);
 
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
     const onPlay = () => {
+      setIsPlaying(true);
       void tryRequestFullscreen(v);
+      scheduleControlsHide();
     };
+
+    const onPause = () => {
+      setIsPlaying(false);
+      clearHideControlsTimer();
+      setShowControls(true);
+    };
+
+    const onTimeUpdate = () => setCurrentTime(v.currentTime || 0);
+    const onLoadedMetadata = () => setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+
     v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("timeupdate", onTimeUpdate);
+    v.addEventListener("loadedmetadata", onLoadedMetadata);
 
     return () => {
       v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("timeupdate", onTimeUpdate);
+      v.removeEventListener("loadedmetadata", onLoadedMetadata);
     };
-  }, [streamUrl]);
+  }, [streamUrl, isPlaying]);
 
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      setShowControls(true);
+      scheduleControlsHide();
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const onBack = (e: KeyboardEvent) => {
+      const code = typeof e.keyCode === "number" ? e.keyCode : undefined;
+      const shouldHandleBack = REMOTE_BACK_KEYS.has(e.key) || (code != null && REMOTE_BACK_CODES.has(code));
+      if (!shouldHandleBack) return;
+      if (!document.fullscreenElement) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      void tryExitFullscreen();
+    };
+
+    window.addEventListener("keydown", onBack, true);
+    return () => window.removeEventListener("keydown", onBack, true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearHideControlsTimer();
+    };
+  }, []);
 
   return (
     <Layout>
@@ -241,14 +383,22 @@ export default function WatchPage() {
               </div>
             ) : null}
 
-            <div className="rounded-2xl overflow-hidden border border-primary/35 bg-black shadow-[0_0_50px_rgba(220,38,38,0.28)]">
+            <div
+              className="relative rounded-2xl overflow-hidden border border-primary/35 bg-black shadow-[0_0_50px_rgba(220,38,38,0.28)]"
+              onMouseMove={showControlsNow}
+              onPointerMove={showControlsNow}
+              onTouchStart={showControlsNow}
+            >
               <video
                 ref={videoRef}
-                className="w-full max-h-[70vh] bg-black"
-                controls
+                className="w-full max-h-[72vh] bg-black"
+                controls={false}
                 playsInline
                 preload="metadata"
                 crossOrigin="anonymous"
+                onClick={() => {
+                  void togglePlayPause();
+                }}
                 onError={() => {
                   const cameFromManifestFallback = streamUrl === directStreamUrl && autoFallbackRef.current.manifestToDirectDone;
                   if (!cameFromManifestFallback && streamUrl !== transcodeStreamUrl && transcodeStreamUrl && !autoFallbackRef.current.directToTranscodeDone) {
@@ -259,6 +409,61 @@ export default function WatchPage() {
                   setVideoError("Video/audio format isn't supported by this browser. Tried direct and transcoded playback.");
                 }}
               />
+
+              <div
+                className={`absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/10 transition-opacity duration-200 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              >
+                <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 space-y-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(duration, 0.1)}
+                    step={0.1}
+                    value={Math.min(currentTime, duration || 0)}
+                    onChange={(e) => {
+                      const v = videoRef.current;
+                      if (!v) return;
+                      v.currentTime = Number(e.target.value);
+                      showControlsNow();
+                    }}
+                    className="w-full accent-red-500 cursor-pointer"
+                    aria-label="Seek"
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(-10)}>
+                        <RotateCcw className="w-5 h-5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => void togglePlayPause()}>
+                        {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+                      </Button>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(10)}>
+                        <RotateCw className="w-5 h-5" />
+                      </Button>
+                      <span className="text-xs md:text-sm text-white/90 tabular-nums">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                    </div>
+
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="focusable text-white hover:bg-white/20"
+                      onClick={() => {
+                        if (isFullscreen) {
+                          void tryExitFullscreen();
+                        } else {
+                          const v = videoRef.current;
+                          if (!v) return;
+                          void tryRequestFullscreen(v);
+                        }
+                      }}
+                    >
+                      {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {videoError ? (
