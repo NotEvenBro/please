@@ -48,8 +48,9 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const [subtitleMode, setSubtitleMode] = useState<"on" | "off">("on");
-  const subtitleParam = subtitleMode === "off" ? "&subtitle=off" : "";
+  const [subtitleOptions, setSubtitleOptions] = useState<Array<{ value: string; label: string }>>([{ value: "off", label: "Off" }]);
+  const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<string>("0");
+  const subtitleParam = selectedSubtitleTrack === "off" ? "&subtitle=off" : "";
   const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}${subtitleParam}` : "";
   const transcodeStreamUrl = id
     ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1${subtitleParam}`
@@ -75,7 +76,8 @@ export default function WatchPage() {
   }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
-    setSubtitleMode("on");
+    setSelectedSubtitleTrack("0");
+    setSubtitleOptions([{ value: "off", label: "Off" }]);
   }, [id]);
 
   useEffect(() => {
@@ -197,7 +199,6 @@ export default function WatchPage() {
 
     const onPlay = () => {
       setIsPlaying(true);
-      void tryRequestFullscreen(v);
     };
     v.onplay = onPlay;
     v.onpause = () => setIsPlaying(false);
@@ -212,22 +213,41 @@ export default function WatchPage() {
     const v = videoRef.current;
     if (!v) return;
 
-    const applySubtitleState = () => {
-      for (const track of Array.from(v.textTracks)) {
-        track.mode = subtitleMode === "off" ? "disabled" : "hidden";
+    const syncSubtitleOptions = () => {
+      const tracks = Array.from(v.textTracks || []);
+      const options = [{ value: "off", label: "Off" }, ...tracks.map((track, index) => ({ value: String(index), label: track.label || track.language || `Subtitle ${index + 1}` }))];
+      setSubtitleOptions(options);
+
+      if (selectedSubtitleTrack !== "off" && !options.some((option) => option.value === selectedSubtitleTrack)) {
+        setSelectedSubtitleTrack("0");
       }
+    };
+
+    const applySubtitleState = () => {
+      const trackIndex = selectedSubtitleTrack === "off" ? -1 : Number(selectedSubtitleTrack);
+      const tracks = Array.from(v.textTracks || []);
+
+      tracks.forEach((track, index) => {
+        track.mode = index === trackIndex ? "showing" : "disabled";
+      });
 
       if (hlsRef.current && typeof hlsRef.current.subtitleTrack === "number") {
-        hlsRef.current.subtitleTrack = subtitleMode === "off" ? -1 : hlsRef.current.subtitleTrack < 0 ? 0 : hlsRef.current.subtitleTrack;
+        hlsRef.current.subtitleTrack = trackIndex;
       }
+
     };
 
+    syncSubtitleOptions();
     applySubtitleState();
-    v.addEventListener("loadedmetadata", applySubtitleState);
+
+    v.addEventListener("loadedmetadata", syncSubtitleOptions);
+    v.textTracks?.addEventListener?.("change", syncSubtitleOptions);
+
     return () => {
-      v.removeEventListener("loadedmetadata", applySubtitleState);
+      v.removeEventListener("loadedmetadata", syncSubtitleOptions);
+      v.textTracks?.removeEventListener?.("change", syncSubtitleOptions);
     };
-  }, [subtitleMode, streamUrl]);
+  }, [selectedSubtitleTrack, streamUrl]);
 
   return (
     <Layout>
@@ -380,15 +400,20 @@ export default function WatchPage() {
                 <Maximize className="w-4 h-4 mr-2" />
                 Fullscreen
               </Button>
-              <Button
-                variant="outline"
-                className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50"
-                onClick={() => {
-                  setSubtitleMode((prev) => (prev === "on" ? "off" : "on"));
-                }}
-              >
-                Subtitles: {subtitleMode === "on" ? "On" : "Off"}
-              </Button>
+              <div className="min-w-44">
+                <Select value={selectedSubtitleTrack} onValueChange={setSelectedSubtitleTrack}>
+                  <SelectTrigger className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50">
+                    <SelectValue placeholder="Subtitles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subtitleOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="text-xs text-red-100/75">TV mode: native controls now support pause/play/scrub outside fullscreen</div>
             </div>
 
