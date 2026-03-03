@@ -48,9 +48,11 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
+  const subtitleParam = subtitleEnabled ? "" : "&subtitle=off";
+  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}${subtitleParam}` : "";
   const transcodeStreamUrl = id
-    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1`
+    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1${subtitleParam}`
     : "";
 
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -71,6 +73,10 @@ export default function WatchPage() {
     setVideoError(null);
     setHlsDebug(null);
   }, [directStreamUrl, transcodeStreamUrl]);
+
+  useEffect(() => {
+    setSubtitleEnabled(true);
+  }, [id]);
 
   useEffect(() => {
     if (isLoading || isError) return;
@@ -255,7 +261,7 @@ export default function WatchPage() {
               <video
                 ref={videoRef}
                 className="w-full max-h-[70vh] bg-black"
-                controls={false}
+                controls
                 playsInline
                 preload="metadata"
                 crossOrigin="anonymous"
@@ -346,7 +352,16 @@ export default function WatchPage() {
                 <Maximize className="w-4 h-4 mr-2" />
                 Fullscreen
               </Button>
-              <div className="text-xs text-red-100/75">TV mode: Enter toggles play on the video, Back returns to previous page</div>
+              <Button
+                variant="outline"
+                className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50"
+                onClick={() => {
+                  setSubtitleEnabled((prev) => !prev);
+                }}
+              >
+                Subtitles: {subtitleEnabled ? "On" : "Off"}
+              </Button>
+              <div className="text-xs text-red-100/75">TV mode: native controls now support pause/play/scrub outside fullscreen</div>
             </div>
 
             {isSeriesLike ? (

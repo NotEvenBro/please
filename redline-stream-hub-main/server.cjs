@@ -202,6 +202,17 @@ function rememberTranscodePath(transcodingUrl, playSessionId, mediaSourceId) {
   if (mediaSourceId) transcodeSessionBasePath.set(`source:${mediaSourceId}`, basePath);
 }
 
+function applySubtitlePreferenceToTranscodeUrl(transcodingUrl, subtitlePref) {
+  if (!transcodingUrl) return transcodingUrl;
+  if (subtitlePref !== 'off') return transcodingUrl;
+
+  const u = new URL(transcodingUrl, config.jellyfinBaseUrl);
+  u.searchParams.delete('SubtitleStreamIndex');
+  u.searchParams.delete('SubtitleMethod');
+  u.searchParams.delete('TranscodeReasons');
+  return `${u.pathname}${u.search}`;
+}
+
 function resolveTranscodeArtifactPath(fileName, playSessionId, mediaSourceId) {
   const bySession = playSessionId ? transcodeSessionBasePath.get(`session:${playSessionId}`) : null;
   const bySource = mediaSourceId ? transcodeSessionBasePath.get(`source:${mediaSourceId}`) : null;
@@ -564,6 +575,7 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
   const mediaSourceId = normalizedMediaSourceId;
   const playSessionId = normalizedPlaySessionId; // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
+  const subtitlePref = String(req.query.subtitle || '').toLowerCase();
 
   const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(requestedId);
   if (isTranscodeArtifact) {
@@ -673,9 +685,10 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
       if ((preferTranscode || shouldTranscodeForCompatibility(source)) && !isAudio) {
         const transcodingUrl = source.TranscodingUrl;
         if (transcodingUrl) {
-          console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
-          rememberTranscodePath(transcodingUrl, discoveredSession, source.Id);
-          return proxyJellyfinStream(transcodingUrl, req, res);
+          const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(transcodingUrl, subtitlePref);
+          console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
+          rememberTranscodePath(effectiveTranscodingUrl, discoveredSession, source.Id);
+          return proxyJellyfinStream(effectiveTranscodingUrl, req, res);
         }
       }
 
@@ -742,9 +755,10 @@ const kind = (req.query.kind || '').toString().toLowerCase();
         info.MediaSources[0] &&
         (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForCompatibility(info.MediaSources[0])))
       ) {
-        console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
-        rememberTranscodePath(info.MediaSources[0].TranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
-        return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
+        const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref);
+        console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
+        rememberTranscodePath(effectiveTranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
+        return proxyJellyfinStream(effectiveTranscodingUrl, req, res);
       }
     } catch (e) {
       console.error('[Stream] compatibility fallback failed', e?.message || e);
