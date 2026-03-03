@@ -207,7 +207,12 @@ function resolveTranscodeArtifactPath(fileName, playSessionId, mediaSourceId) {
   const bySource = mediaSourceId ? transcodeSessionBasePath.get(`source:${mediaSourceId}`) : null;
   const base = bySession || bySource || (mediaSourceId ? `/Videos/${encodeURIComponent(mediaSourceId)}/` : null);
   if (!base) return null;
-  return `${base}${encodeURIComponent(fileName)}`;
+  const safeFilePath = String(fileName)
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `${base}${safeFilePath}`;
 }
 
 // --- Jellyfin stream proxy helper (GET + Range support) ---
@@ -550,20 +555,21 @@ app.get('/api/jellyfin/transcode-debug/:id', async (req, res) => {
 });
 
 // Direct stream (same-origin) + Range support
-app.get('/api/jellyfin/stream/:id', async (req, res) => {
+app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
+  const requestedId = decodeURIComponent((req.params?.[0] || '').toString());
   const normalizedMediaSourceId = (req.query.mediaSourceId || req.query.MediaSourceId || '').toString();
   const normalizedPlaySessionId = (req.query.playSessionId || req.query.PlaySessionId || '').toString();
-  console.log('[Stream]', req.params.id, 'mediaSourceId', normalizedMediaSourceId || '-', 'playSessionId', normalizedPlaySessionId || '-', 'kind', req.query.kind || '-', 'url', req.originalUrl);
-  const id = encodeURIComponent(req.params.id);
+  console.log('[Stream]', requestedId, 'mediaSourceId', normalizedMediaSourceId || '-', 'playSessionId', normalizedPlaySessionId || '-', 'kind', req.query.kind || '-', 'url', req.originalUrl);
+  const id = encodeURIComponent(requestedId);
   const mediaSourceId = normalizedMediaSourceId;
   const playSessionId = normalizedPlaySessionId; // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
 
-  const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(req.params.id);
+  const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(requestedId);
   if (isTranscodeArtifact) {
     const playSession = (req.query.PlaySessionId || req.query.playSessionId || '').toString();
     const sourceId = (req.query.MediaSourceId || req.query.mediaSourceId || '').toString();
-    const targetPath = resolveTranscodeArtifactPath(req.params.id, playSession, sourceId);
+    const targetPath = resolveTranscodeArtifactPath(requestedId, playSession, sourceId);
     if (!targetPath) {
       return res.status(502).json({ error: 'Transcode session context missing', details: 'No base path found for transcode artifact request' });
     }
@@ -581,7 +587,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
 
     const withQs = passthrough.toString();
     const artifactUrl = withQs ? `${targetPath}?${withQs}` : targetPath;
-    console.log('[Stream Artifact]', req.params.id, '=>', artifactUrl);
+    console.log('[Stream Artifact]', requestedId, '=>', artifactUrl);
     return proxyJellyfinStream(artifactUrl, req, res);
   }
 
