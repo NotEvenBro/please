@@ -48,8 +48,8 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
-  const subtitleParam = subtitleEnabled ? "" : "&subtitle=off";
+  const [subtitleMode, setSubtitleMode] = useState<"on" | "off">("on");
+  const subtitleParam = subtitleMode === "off" ? "&subtitle=off" : "";
   const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}${subtitleParam}` : "";
   const transcodeStreamUrl = id
     ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1${subtitleParam}`
@@ -75,7 +75,7 @@ export default function WatchPage() {
   }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
-    setSubtitleEnabled(true);
+    setSubtitleMode("on");
   }, [id]);
 
   useEffect(() => {
@@ -207,6 +207,27 @@ export default function WatchPage() {
       v.onpause = null;
     };
   }, [streamUrl]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const applySubtitleState = () => {
+      for (const track of Array.from(v.textTracks)) {
+        track.mode = subtitleMode === "off" ? "disabled" : "hidden";
+      }
+
+      if (hlsRef.current && typeof hlsRef.current.subtitleTrack === "number") {
+        hlsRef.current.subtitleTrack = subtitleMode === "off" ? -1 : hlsRef.current.subtitleTrack < 0 ? 0 : hlsRef.current.subtitleTrack;
+      }
+    };
+
+    applySubtitleState();
+    v.addEventListener("loadedmetadata", applySubtitleState);
+    return () => {
+      v.removeEventListener("loadedmetadata", applySubtitleState);
+    };
+  }, [subtitleMode, streamUrl]);
 
   return (
     <Layout>
@@ -363,10 +384,10 @@ export default function WatchPage() {
                 variant="outline"
                 className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50"
                 onClick={() => {
-                  setSubtitleEnabled((prev) => !prev);
+                  setSubtitleMode((prev) => (prev === "on" ? "off" : "on"));
                 }}
               >
-                Subtitles: {subtitleEnabled ? "On" : "Off"}
+                Subtitles: {subtitleMode === "on" ? "On" : "Off"}
               </Button>
               <div className="text-xs text-red-100/75">TV mode: native controls now support pause/play/scrub outside fullscreen</div>
             </div>
