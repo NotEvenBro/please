@@ -71,3 +71,29 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Jellyfin transcoding notes (TV playback)
+
+If TV playback is failing or quality looks lower than expected, it's useful to separate **player behavior** from **server transcoding behavior**:
+
+- `react-tv-player` (or any alternate React video wrapper) does **not** perform transcoding itself.
+- Jellyfin does transcoding on the **server** using FFmpeg (CPU or GPU acceleration if configured).
+- The TV/browser only decodes what it receives (direct stream or already-transcoded HLS segments).
+
+### Would switching to `react-tv-player` fix transcoding?
+
+Usually no. It may improve remote-control UX in some apps, but it will not fix server-side manifest/transcode failures or raise transcoded quality by itself.
+
+### What actually affects transcoded quality
+
+1. Jellyfin playback profile and selected output codecs/containers.
+2. Allowed streaming bitrate / max bitrate caps.
+3. Hardware acceleration path (NVENC/Quick Sync/VAAPI/AMF) and FFmpeg support.
+4. Whether subtitles are burned-in (can force heavier transcoding).
+5. Source media constraints (HDR, 10-bit, unsupported codecs, high bitrate spikes).
+
+### Practical recommendation
+
+- Keep the current HLS playback path (`hls.js`) for browser compatibility.
+- Tune quality in Jellyfin server settings (bitrate caps + hardware acceleration) rather than replacing the frontend player library.
+- Use direct play whenever possible, and only enable compatibility transcode for devices/codecs that need it.
