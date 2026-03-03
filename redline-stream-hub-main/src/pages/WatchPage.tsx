@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
-import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize } from "lucide-react";
+import { ExternalLink, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
@@ -37,7 +37,6 @@ export default function WatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playButtonRef = useRef<HTMLButtonElement>(null);
   const hlsRef = useRef<any>(null);
   const autoFallbackRef = useRef({ manifestToDirectDone: false, directToTranscodeDone: false });
 
@@ -49,17 +48,13 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const [subtitleOptions, setSubtitleOptions] = useState<Array<{ value: string; label: string }>>([{ value: "off", label: "Off" }]);
-  const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<string>("0");
-  const subtitleParam = selectedSubtitleTrack === "off" ? "&subtitle=off" : "";
-  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}${subtitleParam}` : "";
+  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
   const transcodeStreamUrl = id
-    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1${subtitleParam}`
+    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1`
     : "";
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hlsDebug, setHlsDebug] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
   const detailsMeta = itemDetails as ({ SeriesId?: string; SeasonId?: string; Id?: string } & typeof itemDetails) | undefined;
   const sourceSeriesId = detailsMeta?.SeriesId ?? detailsMeta?.Id;
@@ -77,29 +72,8 @@ export default function WatchPage() {
   }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
-    setSelectedSubtitleTrack("0");
-    setSubtitleOptions([{ value: "off", label: "Off" }]);
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
   }, [id]);
-
-  useEffect(() => {
-    if (isLoading || isError) return;
-
-    let attempts = 0;
-    const tick = () => {
-      attempts += 1;
-      if (playButtonRef.current) {
-        playButtonRef.current.focus();
-        return;
-      }
-      if (attempts < 8) {
-        window.setTimeout(tick, 80);
-      }
-    };
-
-    const timer = window.setTimeout(tick, 40);
-    return () => window.clearTimeout(timer);
-  }, [isLoading, isError, media?.id]);
 
   useEffect(() => {
     if (!isSeriesLike) {
@@ -201,56 +175,15 @@ export default function WatchPage() {
     if (!v) return;
 
     const onPlay = () => {
-      setIsPlaying(true);
+      void tryRequestFullscreen(v);
     };
-    v.onplay = onPlay;
-    v.onpause = () => setIsPlaying(false);
+    v.addEventListener("play", onPlay);
 
     return () => {
-      v.onplay = null;
-      v.onpause = null;
+      v.removeEventListener("play", onPlay);
     };
   }, [streamUrl]);
 
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    const syncSubtitleOptions = () => {
-      const tracks = Array.from(v.textTracks || []);
-      const options = [{ value: "off", label: "Off" }, ...tracks.map((track, index) => ({ value: String(index), label: track.label || track.language || `Subtitle ${index + 1}` }))];
-      setSubtitleOptions(options);
-
-      if (selectedSubtitleTrack !== "off" && !options.some((option) => option.value === selectedSubtitleTrack)) {
-        setSelectedSubtitleTrack("0");
-      }
-    };
-
-    const applySubtitleState = () => {
-      const trackIndex = selectedSubtitleTrack === "off" ? -1 : Number(selectedSubtitleTrack);
-      const tracks = Array.from(v.textTracks || []);
-
-      tracks.forEach((track, index) => {
-        track.mode = index === trackIndex ? "showing" : "disabled";
-      });
-
-      if (hlsRef.current && typeof hlsRef.current.subtitleTrack === "number") {
-        hlsRef.current.subtitleTrack = trackIndex;
-      }
-
-    };
-
-    syncSubtitleOptions();
-    applySubtitleState();
-
-    v.addEventListener("loadedmetadata", syncSubtitleOptions);
-    v.textTracks?.addEventListener?.("change", syncSubtitleOptions);
-
-    return () => {
-      v.removeEventListener("loadedmetadata", syncSubtitleOptions);
-      v.textTracks?.removeEventListener?.("change", syncSubtitleOptions);
-    };
-  }, [selectedSubtitleTrack, streamUrl]);
 
   return (
     <Layout>
@@ -345,82 +278,6 @@ export default function WatchPage() {
                 HLS debug: {hlsDebug}
               </div>
             ) : null}
-
-            {/* Simple TV-friendly play/pause */}
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-black/35 p-3" data-tv-group="watch-controls">
-              <Button
-                ref={playButtonRef}
-                className="focusable gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold"
-                data-tv-autofocus="true"
-                onClick={async () => {
-                  const v = videoRef.current;
-                  if (!v) return;
-                  if (v.paused) {
-                    // Request fullscreen from the direct user interaction path.
-                    await tryRequestFullscreen(v);
-                    await v.play().catch(() => {
-                      setVideoError("Playback was blocked by the browser. Try pressing play again.");
-                    });
-                  } else {
-                    v.pause();
-                  }
-                }}
-              >
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                {isPlaying ? "Pause" : "Play"}
-              </Button>
-              {streamUrl !== transcodeStreamUrl && transcodeStreamUrl ? (
-                <Button
-                  variant="secondary"
-                  className="focusable bg-red-900/60 hover:bg-red-800/70 text-red-100"
-                  onClick={() => {
-                    setStreamUrl(transcodeStreamUrl);
-                    setVideoError(null);
-                  }}
-                >
-                  Audio issues? Compatibility mode
-                </Button>
-              ) : null}
-              {streamUrl !== directStreamUrl ? (
-                <Button
-                  variant="outline"
-                  className="focusable border-red-400/40 bg-black/40 text-red-100 hover:bg-red-950/50"
-                  onClick={() => {
-                    setStreamUrl(directStreamUrl);
-                    setVideoError(null);
-                  }}
-                >
-                  Use direct stream
-                </Button>
-              ) : null}
-              <Button
-                variant="outline"
-                className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50"
-                onClick={async () => {
-                  const v = videoRef.current;
-                  if (!v) return;
-                  await tryRequestFullscreen(v);
-                }}
-              >
-                <Maximize className="w-4 h-4 mr-2" />
-                Fullscreen
-              </Button>
-              <div className="min-w-44">
-                <Select value={selectedSubtitleTrack} onValueChange={setSelectedSubtitleTrack}>
-                  <SelectTrigger className="focusable border-red-500/40 bg-black/40 text-red-100 hover:bg-red-950/50">
-                    <SelectValue placeholder="Subtitles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subtitleOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="text-xs text-red-100/75">TV mode: native controls now support pause/play/scrub outside fullscreen</div>
-            </div>
 
             {isSeriesLike ? (
               <section className="space-y-3 rounded-2xl border border-primary/20 bg-black/25 p-4" data-tv-group="watch-episodes">
