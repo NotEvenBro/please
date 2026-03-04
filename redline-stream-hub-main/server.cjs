@@ -276,7 +276,7 @@ function buildPlaybackInfoRequestBody(req) {
   const { isTv, isVidaa } = getPlaybackClientHints(req);
 
   // Keep TV streams conservative to reduce segment/network pressure on 10-foot devices.
-  const maxStreamingBitrate = isVidaa ? 15_000_000 : isTv ? 25_000_000 : 120_000_000;
+  const maxStreamingBitrate = isVidaa ? 8_000_000 : isTv ? 18_000_000 : 120_000_000;
   const videoProfile = {
     Container: 'ts',
     Type: 'Video',

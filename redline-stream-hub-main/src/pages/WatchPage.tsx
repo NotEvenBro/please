@@ -72,6 +72,7 @@ export default function WatchPage() {
   const hideChromeTimerRef = useRef<number | null>(null);
   const fragErrorTimesRef = useRef<number[]>([]);
   const fragFallbackTriggeredRef = useRef(false);
+  const lastPlaybackProgressRef = useRef({ time: 0, at: Date.now() });
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -171,6 +172,7 @@ export default function WatchPage() {
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
     fragErrorTimesRef.current = [];
     fragFallbackTriggeredRef.current = false;
+    lastPlaybackProgressRef.current = { time: 0, at: Date.now() };
     setShowControls(true);
     setCurrentTime(0);
     setDuration(0);
@@ -242,23 +244,23 @@ export default function WatchPage() {
               .join(" | ");
             if (detail) setHlsDebug(detail);
 
-            if (data?.fatal) {
-              const httpCode = data?.response?.code;
-              const details = String(data?.details || "");
-              const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(details);
-              const isFragNetworkFailure = data?.type === "networkError" && ["fragLoadError", "fragLoadTimeOut"].includes(details);
+            const httpCode = data?.response?.code;
+            const details = String(data?.details || "");
+            const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(details);
+            const isFragNetworkFailure = data?.type === "networkError" && ["fragLoadError", "fragLoadTimeOut"].includes(details);
 
-              if (isFragNetworkFailure && streamUrl !== directStreamUrl && !fragFallbackTriggeredRef.current) {
-                const now = Date.now();
-                fragErrorTimesRef.current = [...fragErrorTimesRef.current.filter((t) => now - t <= FRAG_ERROR_WINDOW_MS), now];
-                if (fragErrorTimesRef.current.length >= FRAG_ERROR_THRESHOLD) {
-                  fragFallbackTriggeredRef.current = true;
-                  setStreamUrl(directStreamUrl);
-                  setVideoError("Compatibility HLS fragments are repeatedly failing on this device. Falling back to direct stream.");
-                  return;
-                }
+            if (isFragNetworkFailure && streamUrl !== directStreamUrl && !fragFallbackTriggeredRef.current) {
+              const now = Date.now();
+              fragErrorTimesRef.current = [...fragErrorTimesRef.current.filter((t) => now - t <= FRAG_ERROR_WINDOW_MS), now];
+              if (fragErrorTimesRef.current.length >= FRAG_ERROR_THRESHOLD) {
+                fragFallbackTriggeredRef.current = true;
+                setStreamUrl(directStreamUrl);
+                setVideoError("Compatibility HLS fragments are repeatedly failing on this device. Falling back to direct stream.");
+                return;
               }
+            }
 
+            if (data?.fatal) {
               if ((httpCode === 504 || isManifestNetworkFailure) && streamUrl !== directStreamUrl && !autoFallbackRef.current.manifestToDirectDone) {
                 autoFallbackRef.current.manifestToDirectDone = true;
                 setStreamUrl(directStreamUrl);
@@ -288,6 +290,39 @@ export default function WatchPage() {
       cleanup();
     };
   }, [streamUrl, directStreamUrl, isViddaEdge]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const STALL_WINDOW_MS = 20000;
+    const STALL_EPSILON_SECONDS = 0.35;
+    const check = () => {
+      if (streamUrl === directStreamUrl || fragFallbackTriggeredRef.current) return;
+      if (v.paused || v.seeking || v.ended) {
+        lastPlaybackProgressRef.current = { time: v.currentTime || 0, at: Date.now() };
+        return;
+      }
+
+      const now = Date.now();
+      const delta = Math.abs((v.currentTime || 0) - lastPlaybackProgressRef.current.time);
+      if (delta > STALL_EPSILON_SECONDS) {
+        lastPlaybackProgressRef.current = { time: v.currentTime || 0, at: now };
+        return;
+      }
+
+      if (now - lastPlaybackProgressRef.current.at >= STALL_WINDOW_MS) {
+        fragFallbackTriggeredRef.current = true;
+        setStreamUrl(directStreamUrl);
+        setVideoError("Playback appears stalled on compatibility HLS. Falling back to direct stream.");
+      }
+    };
+
+    const timer = window.setInterval(check, 4000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [streamUrl, directStreamUrl]);
 
   useEffect(() => {
     const v = videoRef.current;
