@@ -2,16 +2,13 @@ import { ReactNode, useEffect } from "react";
 import { init } from "@noriginmedia/norigin-spatial-navigation";
 import TopNav from "./TopNav";
 import { useTvNavigation } from "@/lib/useTvNavigation";
-import { useControlMode } from "@/lib/useControlMode";
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { mode, isTvMode } = useControlMode();
-  useTvNavigation(isTvMode);
-
+  useTvNavigation();
   useEffect(() => {
     init({
       debug: false,

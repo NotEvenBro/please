@@ -33,8 +33,8 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         ref={ref}
         type="button"
         className={[
-          "focusable group relative rounded-2xl overflow-hidden bg-card/90 border border-border/50 shadow-[0_8px_30px_rgba(0,0,0,0.28)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
-          "transition-transform duration-150 will-change-transform",
+          "focusable group relative rounded-2xl overflow-hidden bg-card shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+          "transition-transform duration-150",
           focused ? "ring-4 ring-primary/70 scale-[1.03]" : "ring-0",
         ].join(" ")}
         style={{ width: "clamp(140px, 18vw, 220px)", aspectRatio: "2/3" }}
