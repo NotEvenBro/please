@@ -191,6 +191,43 @@ function proxyJellyfinRequest(jellyfinPath, req, res, method = 'POST', body = nu
 }
 
 
+async function proxyJellyfinJson(jellyfinPath) {
+  if (!config.jellyfinBaseUrl || !config.jellyfinApiKey || !config.jellyfinUserId) {
+    throw new Error('Jellyfin not configured');
+  }
+
+  const url = new URL(jellyfinPath, config.jellyfinBaseUrl);
+  const mod = url.protocol === 'https:' ? https : http;
+
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+    headers: {
+      'X-Emby-Token': config.jellyfinApiKey,
+      'Accept': 'application/json',
+    },
+  };
+
+  return await new Promise((resolve, reject) => {
+    const req = mod.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        try {
+          resolve(body ? JSON.parse(body) : null);
+        } catch (e) {
+          reject(new Error(`Invalid JSON from Jellyfin (${res.statusCode || 0}): ${String(body).slice(0, 200)}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 
 const transcodeSessionBasePath = new Map();
 
