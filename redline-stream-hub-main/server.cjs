@@ -565,13 +565,50 @@ app.get('/api/jellyfin/transcode-debug/:id', async (req, res) => {
   }
 });
 
+
+async function fetchFirstEpisodeIdForSeries(seriesId) {
+  if (!seriesId) return null;
+
+  try {
+    const params = new URLSearchParams({
+      ParentId: seriesId,
+      UserId: config.jellyfinUserId,
+      IncludeItemTypes: 'Episode',
+      Recursive: 'true',
+      SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+      SortOrder: 'Ascending',
+      Limit: '1',
+      Fields: 'Id,Type',
+    });
+
+    const result = await proxyJellyfinJson(`/Users/${config.jellyfinUserId}/Items?${params.toString()}`);
+    const first = Array.isArray(result?.Items) ? result.Items[0] : null;
+    return first?.Id || null;
+  } catch (e) {
+    console.error('[Stream] Series episode resolution failed', e?.message || e);
+    return null;
+  }
+}
+
 // Direct stream (same-origin) + Range support
 app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
   const requestedId = decodeURIComponent((req.params?.[0] || '').toString());
   const normalizedMediaSourceId = (req.query.mediaSourceId || req.query.MediaSourceId || '').toString();
   const normalizedPlaySessionId = (req.query.playSessionId || req.query.PlaySessionId || '').toString();
   console.log('[Stream]', requestedId, 'mediaSourceId', normalizedMediaSourceId || '-', 'playSessionId', normalizedPlaySessionId || '-', 'kind', req.query.kind || '-', 'url', req.originalUrl);
-  const id = encodeURIComponent(requestedId);
+  const kind = (req.query.kind || '').toString().toLowerCase();
+  const isAudio = kind === 'track' || kind === 'audio';
+
+  let targetRequestedId = requestedId;
+  if (!isAudio && kind === 'series') {
+    const firstEpisodeId = await fetchFirstEpisodeIdForSeries(requestedId);
+    if (firstEpisodeId) {
+      console.log('[Stream] Resolved series id to first episode', requestedId, '=>', firstEpisodeId);
+      targetRequestedId = firstEpisodeId;
+    }
+  }
+
+  const id = encodeURIComponent(targetRequestedId);
   const mediaSourceId = normalizedMediaSourceId;
   const playSessionId = normalizedPlaySessionId; // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
@@ -712,9 +749,6 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
       return proxyJellyfinStream(fallbackPath, req, res);
     }
   }
-
-const kind = (req.query.kind || '').toString().toLowerCase();
-  const isAudio = kind === 'track' || kind === 'audio';
 
   if (!isAudio) {
     try {
