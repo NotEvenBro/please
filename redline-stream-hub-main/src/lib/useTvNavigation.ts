@@ -39,8 +39,18 @@ function isFocusable(el: Element): el is HTMLElement {
   return true;
 }
 
-function center(rect: DOMRect) {
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+function isNearTopOfPage() {
+  return (window.scrollY || window.pageYOffset || 0) <= 16;
+}
+
+function getGroupKey(el: HTMLElement): string {
+  const group = el.closest<HTMLElement>("[data-tv-group]");
+  if (group?.dataset.tvGroup) return group.dataset.tvGroup;
+
+  const rail = el.closest<HTMLElement>(".rail-scroll");
+  if (rail) return "rail-scroll";
+
+  return "default";
 }
 
 function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
@@ -150,8 +160,49 @@ function isTypingContext(active: HTMLElement | null): boolean {
   return active.isContentEditable;
 }
 
-export function useTvNavigation() {
+function normalizeDirectionalKeyForLayout(key: string, active: HTMLElement) {
+  const inEpisodeColumn = Boolean(active.closest("[data-tv-episode-column='true']"));
+  if (!inEpisodeColumn) return key;
+
+  // Column layout that behaves like a horizontal row for remotes:
+  // Right advances to next episode, Left goes to previous episode.
+  if (key === "ArrowRight") return "ArrowDown";
+  if (key === "ArrowLeft") return "ArrowUp";
+  return key;
+}
+
+function getAutoFocusTarget(scope: ParentNode, items: HTMLElement[]) {
+  const scoped = scope instanceof HTMLElement || scope instanceof Document ? scope : document;
+  const preferred = scoped.querySelector<HTMLElement>("[data-tv-autofocus='true'].focusable");
+  if (preferred && items.includes(preferred)) return preferred;
+  return items[0] ?? null;
+}
+
+
+function getFocusableItems(scope: ParentNode) {
+  const scopedItems = Array.from(scope.querySelectorAll(".focusable"));
+
+  // When navigating page content (non-modal), include top-nav items as part of the
+  // candidate pool so left/right in top bar can move across links.
+  const topNav = document.querySelector("[data-tv-group='top-nav']");
+  const includeTopNav = topNav && scope !== topNav && !(scope instanceof HTMLElement && scope.getAttribute("role") === "dialog");
+  const topNavItems = includeTopNav ? Array.from(topNav.querySelectorAll(".focusable")) : [];
+
+  return Array.from(new Set([...scopedItems, ...topNavItems])).filter(isFocusable);
+}
+
+function ensureVisible(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  const outOfVerticalBounds = rect.top < 0 || rect.bottom > window.innerHeight;
+  const outOfHorizontalBounds = rect.left < 0 || rect.right > window.innerWidth;
+  if (!outOfVerticalBounds && !outOfHorizontalBounds) return;
+
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+export function useTvNavigation(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;

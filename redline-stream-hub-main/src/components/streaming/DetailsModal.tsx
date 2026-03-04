@@ -55,6 +55,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
 
   const modalRef = useRef<HTMLDivElement>(null);
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
 
   const { data: itemDetails } = useItem(item?.id);
@@ -103,10 +104,14 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   }, [onClose, navigate, effective?.id, effective?.kind]);
 
   useEffect(() => {
-    if (item) {
-      setTimeout(() => modalRef.current?.focus(), 0);
-    }
-  }, [item]);
+    if (!item) return;
+    setTimeout(() => {
+      primaryActionRef.current?.focus();
+      if (document.activeElement !== primaryActionRef.current) {
+        modalRef.current?.focus();
+      }
+    }, 0);
+  }, [item?.id]);
 
   if (!item || !effective) return null;
 
@@ -186,9 +191,11 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
             <div className="flex items-center gap-3" data-tv-group="details-actions">
               <Button
+                ref={primaryActionRef}
                 className="focusable gap-2 bg-foreground text-background hover:bg-foreground/90 font-bold px-6 py-5 rounded-md"
                 onClick={primaryAction.onClick}
                 aria-label={`${primaryAction.label} ${effective.title}`}
+                data-tv-autofocus="true"
               >
                 <primaryAction.icon className="w-4 h-4 fill-current" />
                 {primaryAction.label}
@@ -309,7 +316,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                 </div>
               </div>
 
-              <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1" data-tv-episode-column="true">
                 {episodes.map((ep) => {
                   const ui = jellyfinToMediaUI(ep, { posterWidth: 420, backdropWidth: 900 });
                   const epNum = ep.IndexNumber != null ? ep.IndexNumber : undefined;
@@ -319,6 +326,26 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                       key={ep.Id}
                       className="w-full text-left focusable rounded-md bg-background/30 hover:bg-background/40 transition-colors p-3 flex gap-3 items-center"
                       onClick={() => navigate(`/watch/${ep.Id}`)}
+                      data-episode-id={ep.Id}
+                      data-tv-episode-column-item="true"
+                      onKeyDown={(e) => {
+                        const key = e.key;
+                        if (key === "Enter" || key === " " || key === "Select" || key === "OK") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
+                      onKeyUp={(e) => {
+                        if (e.code === "NumpadEnter") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+                      }}
                       aria-label={`Play ${ui.title}`}
                     >
                       <div className="w-36 flex-none rounded overflow-hidden bg-muted" style={{ aspectRatio: "16/9" }}>
