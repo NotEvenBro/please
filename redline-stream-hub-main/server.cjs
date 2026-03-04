@@ -642,6 +642,11 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
     if (firstEpisodeId) {
       console.log('[Stream] Resolved series id to first episode', requestedId, '=>', firstEpisodeId);
       targetRequestedId = firstEpisodeId;
+    } else {
+      return res.status(404).json({
+        error: 'Series has no playable episodes',
+        details: `Could not resolve a first episode for series ${requestedId}`,
+      });
     }
   }
 
