@@ -55,6 +55,11 @@ function isLikelyTvDevice() {
   return /smart-tv|smarttv|tizen|webos|appletv|hbbtv|aft|googletv|bravia|viera|roku|crkey|tv/.test(ua);
 }
 
+function isViddaEdgeDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /vidda_edge/i.test(navigator.userAgent || "");
+}
+
 const REMOTE_BACK_KEYS = new Set(["Escape", "BrowserBack", "Backspace", "GoBack", "XF86Back"]);
 const REMOTE_BACK_CODES = new Set([8, 27, 461, 10009, 166]);
 
@@ -81,7 +86,8 @@ export default function WatchPage() {
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hlsDebug, setHlsDebug] = useState<string | null>(null);
-  const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
+  const isViddaEdge = useMemo(() => isViddaEdgeDevice(), []);
+  const [streamUrl, setStreamUrl] = useState(() => (isLikelyTvDevice() && !isViddaEdgeDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl));
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -154,10 +160,10 @@ export default function WatchPage() {
   };
 
   useEffect(() => {
-    setStreamUrl(isLikelyTvDevice() ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
+    setStreamUrl(isLikelyTvDevice() && !isViddaEdge ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
     setHlsDebug(null);
-  }, [directStreamUrl, transcodeStreamUrl]);
+  }, [directStreamUrl, transcodeStreamUrl, isViddaEdge]);
 
   useEffect(() => {
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
@@ -235,7 +241,7 @@ export default function WatchPage() {
               if ((httpCode === 504 || isManifestNetworkFailure) && streamUrl !== directStreamUrl && !autoFallbackRef.current.manifestToDirectDone) {
                 autoFallbackRef.current.manifestToDirectDone = true;
                 setStreamUrl(directStreamUrl);
-                setVideoError("Compatibility HLS manifest failed to load on this device. Falling back to direct stream.");
+                setVideoError(`Compatibility HLS manifest failed to load${isViddaEdge ? " on VIDAA Edge" : " on this device"}. Falling back to direct stream.`);
                 return;
               }
               setVideoError("Compatibility stream failed to load. Try switching stream mode.");
@@ -260,7 +266,7 @@ export default function WatchPage() {
       cancelled = true;
       cleanup();
     };
-  }, [streamUrl, directStreamUrl]);
+  }, [streamUrl, directStreamUrl, isViddaEdge]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -481,6 +487,12 @@ export default function WatchPage() {
             {hlsDebug ? (
               <div className="rounded-lg border border-yellow-500/30 bg-yellow-950/20 p-3 text-xs text-yellow-200">
                 HLS debug: {hlsDebug}
+              </div>
+            ) : null}
+
+            {isViddaEdge ? (
+              <div className="rounded-lg border border-blue-500/30 bg-blue-950/20 p-3 text-xs text-blue-100">
+                VIDAA Edge detected: starting with direct stream first for better compatibility, then falling back to compatibility transcoding only if needed.
               </div>
             ) : null}
 
