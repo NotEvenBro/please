@@ -31,6 +31,7 @@ export default function TopNav() {
       style={{ height: "var(--nav-height)" }}
       role="navigation"
       aria-label="Main navigation"
+      data-tv-group="top-nav"
     >
       <div className="flex items-center h-full tv-safe">
         <Link to="/" className="focusable mr-6 sm:mr-10 flex items-center gap-3">
@@ -55,7 +56,7 @@ export default function TopNav() {
                 }`}
                 aria-current={active ? "page" : undefined}
               >
-                <item.icon className="w-4 h-4" />
+                <item.icon className="w-5 h-5 shrink-0 stroke-[2.25] drop-shadow-[0_0_2px_rgba(255,255,255,0.25)]" />
                 {item.label}
               </Link>
             );
@@ -75,7 +76,7 @@ export default function TopNav() {
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className="w-6 h-6 shrink-0 stroke-[2.4] drop-shadow-[0_0_2px_rgba(255,255,255,0.28)]" />
               </Link>
             );
           })}
