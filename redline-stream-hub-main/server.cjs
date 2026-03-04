@@ -263,6 +263,55 @@ function resolveTranscodeArtifactPath(fileName, playSessionId, mediaSourceId) {
   return `${base}${safeFilePath}`;
 }
 
+
+function getPlaybackClientHints(req) {
+  const userAgent = String(req.headers['user-agent'] || '').toLowerCase();
+  const isVidaa = /vidaa|hisense/.test(userAgent);
+  const isTv = isVidaa || /(smart-tv|smarttv|hbbtv|tizen|web0s|webos|roku|appletv|googletv|android tv|bravia|viera)/.test(userAgent);
+
+  return { isTv, isVidaa, userAgent };
+}
+
+function buildPlaybackInfoRequestBody(req) {
+  const { isTv, isVidaa } = getPlaybackClientHints(req);
+
+  // Keep TV streams conservative to reduce segment/network pressure on 10-foot devices.
+  const maxStreamingBitrate = isVidaa ? 15_000_000 : isTv ? 25_000_000 : 120_000_000;
+  const videoProfile = {
+    Container: 'ts',
+    Type: 'Video',
+    VideoCodec: 'h264',
+    AudioCodec: 'aac',
+    Context: 'Streaming',
+    Protocol: 'hls',
+  };
+
+  if (isVidaa) {
+    // VIDAA browsers are most stable with MPEG-TS HLS segments and AVC baseline profile.
+    videoProfile.SegmentContainer = 'ts';
+    videoProfile.MinSegments = 1;
+    videoProfile.BreakOnNonKeyFrames = false;
+  }
+
+  return JSON.stringify({
+    DeviceProfile: {
+      MaxStreamingBitrate: maxStreamingBitrate,
+      DirectPlayProfiles: [
+        { Container: 'mp4,m4v,webm', Type: 'Video' },
+        { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' },
+      ],
+      TranscodingProfiles: [
+        videoProfile,
+        { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' },
+      ],
+    },
+    EnableDirectPlay: true,
+    EnableTranscoding: true,
+    AllowVideoStreamCopy: true,
+    AllowAudioStreamCopy: false,
+  });
+}
+
 // --- Jellyfin stream proxy helper (GET + Range support) ---
 function proxyJellyfinStream(jellyfinPath, req, res) {
   if (!config.jellyfinBaseUrl || !config.jellyfinApiKey || !config.jellyfinUserId) {
@@ -710,7 +759,7 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
+      const body = buildPlaybackInfoRequestBody(req);
       // Use proxyJellyfinRequest-style call but inline so we can parse JSON
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
@@ -798,7 +847,7 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({ DeviceProfile: { MaxStreamingBitrate: 120000000, DirectPlayProfiles: [{ Container: 'mp4,m4v,webm', Type: 'Video' }, { Container: 'mp3,aac,ogg,opus,m4a,wav', Type: 'Audio' }], TranscodingProfiles: [{ Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Context: 'Streaming', Protocol: 'hls' }, { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Context: 'Streaming', Protocol: 'http' }] }, EnableDirectPlay: true, EnableTranscoding: true, AllowVideoStreamCopy: true, AllowAudioStreamCopy: false });
+      const body = buildPlaybackInfoRequestBody(req);
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
       const headers = {

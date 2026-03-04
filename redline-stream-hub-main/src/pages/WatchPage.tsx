@@ -70,6 +70,8 @@ export default function WatchPage() {
   const hlsRef = useRef<any>(null);
   const autoFallbackRef = useRef({ manifestToDirectDone: false, directToTranscodeDone: false });
   const hideChromeTimerRef = useRef<number | null>(null);
+  const fragErrorTimesRef = useRef<number[]>([]);
+  const fragFallbackTriggeredRef = useRef(false);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -167,6 +169,8 @@ export default function WatchPage() {
 
   useEffect(() => {
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
+    fragErrorTimesRef.current = [];
+    fragFallbackTriggeredRef.current = false;
     setShowControls(true);
     setCurrentTime(0);
     setDuration(0);
@@ -203,6 +207,9 @@ export default function WatchPage() {
       v.load();
     };
 
+    const FRAG_ERROR_WINDOW_MS = 12000;
+    const FRAG_ERROR_THRESHOLD = 4;
+
     const setup = async () => {
       const shouldUseHls = streamUrl.includes("preferTranscode=1");
       if (!shouldUseHls) {
@@ -237,7 +244,21 @@ export default function WatchPage() {
 
             if (data?.fatal) {
               const httpCode = data?.response?.code;
-              const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(String(data?.details || ""));
+              const details = String(data?.details || "");
+              const isManifestNetworkFailure = data?.type === "networkError" && ["manifestLoadError", "manifestLoadTimeOut"].includes(details);
+              const isFragNetworkFailure = data?.type === "networkError" && ["fragLoadError", "fragLoadTimeOut"].includes(details);
+
+              if (isFragNetworkFailure && streamUrl !== directStreamUrl && !fragFallbackTriggeredRef.current) {
+                const now = Date.now();
+                fragErrorTimesRef.current = [...fragErrorTimesRef.current.filter((t) => now - t <= FRAG_ERROR_WINDOW_MS), now];
+                if (fragErrorTimesRef.current.length >= FRAG_ERROR_THRESHOLD) {
+                  fragFallbackTriggeredRef.current = true;
+                  setStreamUrl(directStreamUrl);
+                  setVideoError("Compatibility HLS fragments are repeatedly failing on this device. Falling back to direct stream.");
+                  return;
+                }
+              }
+
               if ((httpCode === 504 || isManifestNetworkFailure) && streamUrl !== directStreamUrl && !autoFallbackRef.current.manifestToDirectDone) {
                 autoFallbackRef.current.manifestToDirectDone = true;
                 setStreamUrl(directStreamUrl);
