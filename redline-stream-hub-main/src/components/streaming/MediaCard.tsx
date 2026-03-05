@@ -33,8 +33,8 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         ref={ref}
         type="button"
         className={[
-          "group relative rounded-2xl overflow-hidden bg-card shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-          "transition-transform duration-150",
+          "focusable group relative rounded-2xl overflow-hidden bg-card/90 border border-border/50 shadow-[0_8px_30px_rgba(0,0,0,0.28)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
+          "transition-transform duration-150 will-change-transform",
           focused ? "ring-4 ring-primary/70 scale-[1.03]" : "ring-0",
         ].join(" ")}
         style={{ width: "clamp(140px, 18vw, 220px)", aspectRatio: "2/3" }}
@@ -64,9 +64,9 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         <div className="absolute inset-0 bg-gradient-to-b from-muted/30 to-muted/80" />
 
         {/* Title strip so card never looks empty */}
-        <div className="absolute left-0 right-0 bottom-0 p-2 bg-background/70 backdrop-blur-sm">
-          <div className="text-sm font-semibold leading-tight line-clamp-2">{item.title}</div>
-          {subtitle ? <div className="text-xs text-muted-foreground line-clamp-1">{subtitle}</div> : null}
+        <div className="absolute left-0 right-0 bottom-0 p-2.5 bg-gradient-to-t from-black/92 via-black/75 to-black/20 backdrop-blur-[1px]">
+          <div className="text-[0.95rem] font-semibold tracking-tight leading-tight text-white line-clamp-2">{item.title}</div>
+          {subtitle ? <div className="text-xs text-white/75 line-clamp-1 mt-0.5">{subtitle}</div> : null}
 
           {showRating && starValue != null ? (
             <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
