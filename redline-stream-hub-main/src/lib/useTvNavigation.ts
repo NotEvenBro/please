@@ -149,14 +149,7 @@ function isTextInputElement(el: HTMLElement) {
   return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
-function normalizeDirectionalKeyForLayout(key: string, active: HTMLElement) {
-  const inEpisodeColumn = Boolean(active.closest("[data-tv-episode-column='true']"));
-  if (!inEpisodeColumn) return key;
-
-  // Column layout that behaves like a horizontal row for remotes:
-  // Right advances to next episode, Left goes to previous episode.
-  if (key === "ArrowRight") return "ArrowDown";
-  if (key === "ArrowLeft") return "ArrowUp";
+function normalizeDirectionalKeyForLayout(key: string, _active: HTMLElement) {
   return key;
 }
 
@@ -248,6 +241,24 @@ export function useTvNavigation(enabled = true) {
 
         if (dir === "down" && getGroupKey(active) === "details-actions") {
           const episodeTarget = getFirstFocusableInGroup("details-episodes");
+          if (episodeTarget) {
+            episodeTarget.focus();
+            ensureVisible(episodeTarget);
+            return;
+          }
+        }
+
+        if (dir === "right" && active.closest("[data-tv-episode-column='true']")) {
+          const seasonTrigger = document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-season-trigger='true'].focusable");
+          if (seasonTrigger) {
+            seasonTrigger.focus();
+            ensureVisible(seasonTrigger);
+            return;
+          }
+        }
+
+        if (dir === "left" && active.dataset.tvSeasonTrigger === "true") {
+          const episodeTarget = document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-episode-column-item='true'].focusable");
           if (episodeTarget) {
             episodeTarget.focus();
             ensureVisible(episodeTarget);

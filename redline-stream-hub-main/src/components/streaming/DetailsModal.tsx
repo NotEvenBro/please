@@ -302,7 +302,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                 <h3 className="text-xl font-black text-foreground">Episodes</h3>
                 <div className="w-44">
                   <Select value={selectedSeasonId ?? undefined} onValueChange={(v) => setSelectedSeasonId(v)}>
-                    <SelectTrigger className="focusable">
+                    <SelectTrigger className="focusable" data-tv-season-trigger="true">
                       <SelectValue placeholder="Season" />
                     </SelectTrigger>
                     <SelectContent>
