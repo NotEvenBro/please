@@ -50,7 +50,7 @@ export default function RailCarousel({
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <section ref={ref as any} className="py-4" aria-label={title}>
+      <section ref={ref as any} className="py-4" aria-label={title} data-tv-group={railKey}>
         {titleLink ? (
           <h2 className="text-lg sm:text-xl font-bold text-foreground mb-3 tv-safe">
             <Link to={titleLink} className="inline-block rounded-sm">

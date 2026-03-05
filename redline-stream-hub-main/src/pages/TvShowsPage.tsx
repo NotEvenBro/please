@@ -20,11 +20,29 @@ export default function TvShowsPage() {
   const recentEpisodes = useMemo(() => (recentEpisodesQ.data ?? []).map((x) => jellyfinToMediaUI(x)), [_ratingsVersion, recentEpisodesQ.data]);
 
   const series = useMemo(() => {
-    const arr = (seriesQ.data?.Items ?? []).map((x) => jellyfinToMediaUI(x));
+    const rawItems = seriesQ.data?.Items ?? [];
+    const deduped = new Map<string, MediaItemUI>();
+
+    for (const raw of rawItems) {
+      const ui = jellyfinToMediaUI(raw);
+
+      // Only keep actual series tiles in the TV section.
+      // If a season leaks in from the backend payload, group it under its parent series.
+      const key = ui.kind === "Series" ? ui.id : (ui.seriesId ?? ui.id);
+      if (!key) continue;
+
+      const existing = deduped.get(key);
+      if (!existing || (existing.kind !== "Series" && ui.kind === "Series")) {
+        deduped.set(key, ui);
+      }
+    }
+
+    const arr = Array.from(deduped.values()).filter((x) => x.kind === "Series");
+
     arr.sort((a, b) => {
       if (sort === "rating") {
-        const ar = a.rating ?? -1;
-        const br = b.rating ?? -1;
+        const ar = a.userStars ?? (a.rating != null ? a.rating / 2 : -1);
+        const br = b.userStars ?? (b.rating != null ? b.rating / 2 : -1);
         if (br !== ar) return br - ar;
       }
       return a.title.localeCompare(b.title);
