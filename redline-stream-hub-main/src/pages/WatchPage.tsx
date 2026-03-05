@@ -166,6 +166,18 @@ export default function WatchPage() {
     return `${m}:${String(sec).padStart(2, "0")}`;
   };
 
+
+  const tryAutoPlay = async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      await v.play();
+      setVideoError(null);
+    } catch {
+      // Some browsers require explicit user gesture. Keep controls visible for retry.
+      setShowControls(true);
+    }
+  };
   useEffect(() => {
     setStreamUrl(isLikelyTvDevice() && !isViddaEdge ? transcodeStreamUrl || directStreamUrl : directStreamUrl);
     setVideoError(null);
@@ -229,6 +241,7 @@ export default function WatchPage() {
           hlsRef.current = null;
         }
         v.src = streamUrl;
+        void tryAutoPlay();
         return;
       }
 
@@ -240,6 +253,7 @@ export default function WatchPage() {
         if (shouldPreferNativeHls && v.canPlayType("application/vnd.apple.mpegurl")) {
           v.src = streamUrl;
           setHlsDebug("Using native HLS path for VIDAA/Hisense device");
+          void tryAutoPlay();
           return;
         }
 
@@ -256,6 +270,9 @@ export default function WatchPage() {
           hls.attachMedia(v);
           hls.on(Hls.Events.MEDIA_ATTACHED, () => {
             hls.loadSource(streamUrl);
+          });
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            void tryAutoPlay();
           });
           hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean; type?: string; details?: string; response?: { code?: number } }) => {
             const detail = [data?.type, data?.details, data?.response?.code ? `HTTP:${data.response.code}` : null]
@@ -435,7 +452,7 @@ export default function WatchPage() {
   return (
     <Layout>
       <div className="page-container tv-safe pt-[calc(var(--nav-height)+1rem)] space-y-6" data-tv-group="watch-page">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3" data-tv-group="watch-controls">
           <Button
             variant="ghost"
             className="focusable h-14 w-14 p-0 rounded-full bg-black/45 hover:bg-black/70 border border-primary/50 shadow-[0_0_20px_rgba(239,68,68,0.28)]"
@@ -520,6 +537,7 @@ export default function WatchPage() {
               >
                 <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 space-y-3">
                   <input
+                    tabIndex={-1}
                     type="range"
                     min={0}
                     max={Math.max(duration, 0.1)}
@@ -534,12 +552,12 @@ export default function WatchPage() {
                     className="w-full accent-red-500 cursor-pointer"
                     aria-label="Seek"
                   />
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3" data-tv-group="watch-controls">
                     <div className="flex items-center gap-2">
                       <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(-10)}>
                         <RotateCcw className="w-5 h-5" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => void togglePlayPause()}>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" data-tv-autofocus="true" onClick={() => void togglePlayPause()}>
                         {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                       </Button>
                       <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(10)}>

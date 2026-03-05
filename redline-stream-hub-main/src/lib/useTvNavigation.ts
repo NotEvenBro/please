@@ -3,7 +3,7 @@ import { useEffect } from "react";
 type Dir = "left" | "right" | "up" | "down";
 
 function normalizeKey(key: string, code?: string, keyCode?: number) {
-  if (code === "NumpadEnter" || keyCode === 13) return "Enter";
+  if (code === "NumpadEnter" || keyCode === 13 || keyCode === 23 || keyCode === 66) return "Enter";
   if (keyCode === 37) return "ArrowLeft";
   if (keyCode === 38) return "ArrowUp";
   if (keyCode === 39) return "ArrowRight";
@@ -18,7 +18,7 @@ function normalizeKey(key: string, code?: string, keyCode?: number) {
     ? "ArrowUp"
     : key === "Down"
     ? "ArrowDown"
-    : key === "OK" || key === "Select"
+    : key === "OK" || key === "Select" || key === "Center"
     ? "Enter"
     : key === "GoBack" || key === "BrowserBack" || key === "Back" || key === "Escape" || key === "XF86Back" || key === "HistoryBack"
     ? "Back"
