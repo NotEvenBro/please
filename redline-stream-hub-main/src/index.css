@@ -90,6 +90,21 @@
     border-radius: var(--radius);
   }
 
+
+  body[data-control-mode="tv"] {
+    cursor: none;
+  }
+
+  body[data-control-mode="pc"] .focusable:focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+
+  body[data-control-mode="tv"] .rail-scroll {
+    scroll-padding-left: calc(var(--tv-safe-margin) + 12px);
+    scroll-padding-right: calc(var(--tv-safe-margin) + 12px);
+  }
+
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
