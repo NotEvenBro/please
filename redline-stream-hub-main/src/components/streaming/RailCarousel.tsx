@@ -50,22 +50,22 @@ export default function RailCarousel({
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <section ref={ref as any} className="py-4" aria-label={title}>
+      <section ref={ref as any} className="py-3" aria-label={title} data-tv-group={railKey}>
         {titleLink ? (
-          <h2 className="text-lg sm:text-xl font-bold text-foreground mb-3 tv-safe">
-            <Link to={titleLink} className="inline-block rounded-sm">
+          <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">
+            <Link to={titleLink} className="focusable inline-block rounded-sm px-1 py-0.5">
               {title}
             </Link>
           </h2>
         ) : (
-          <h2 className="text-lg sm:text-xl font-bold text-foreground mb-3 tv-safe">{title}</h2>
+          <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">{title}</h2>
         )}
 
         <div className="relative group/rail">
           {/* Scroll buttons (mouse/touch) */}
           <button
             onClick={() => scroll("left")}
-            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center opacity-0 group-hover/rail:opacity-100 transition-opacity"
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-black/70 backdrop-blur flex items-center justify-center opacity-0 group-hover/rail:opacity-100 transition-opacity"
             aria-label="Scroll left"
             type="button"
           >
@@ -74,7 +74,7 @@ export default function RailCarousel({
 
           <button
             onClick={() => scroll("right")}
-            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center opacity-0 group-hover/rail:opacity-100 transition-opacity"
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-black/70 backdrop-blur flex items-center justify-center opacity-0 group-hover/rail:opacity-100 transition-opacity"
             aria-label="Scroll right"
             type="button"
           >
