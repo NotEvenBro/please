@@ -64,6 +64,10 @@ function isViddaEdgeDevice() {
 
 const REMOTE_BACK_KEYS = new Set(["Escape", "BrowserBack", "Backspace", "GoBack", "XF86Back"]);
 const REMOTE_BACK_CODES = new Set([8, 27, 461, 10009, 166]);
+const REMOTE_PLAY_PAUSE_CODES = new Set([13, 23, 66, 179, 415, 19]);
+const REMOTE_PAUSE_CODES = new Set([19]);
+const REMOTE_SEEK_FORWARD_CODES = new Set([417, 228]);
+const REMOTE_SEEK_BACK_CODES = new Set([412, 227]);
 
 export default function WatchPage() {
   const { id } = useParams();
@@ -77,6 +81,7 @@ export default function WatchPage() {
   const fragFallbackTriggeredRef = useRef(false);
   const mediaRecoveryAttemptedRef = useRef(false);
   const lastPlaybackProgressRef = useRef({ time: 0, at: Date.now() });
+  const playPauseButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
 
@@ -443,6 +448,59 @@ export default function WatchPage() {
     return () => window.removeEventListener("keydown", onBack, true);
   }, []);
 
+
+
+  useEffect(() => {
+    const onRemoteControls = (e: KeyboardEvent) => {
+      const code = typeof e.keyCode === "number" ? e.keyCode : -1;
+      const key = String(e.key || "");
+      const active = document.activeElement as HTMLElement | null;
+      const inEpisodeRail = Boolean(active?.closest("[data-tv-group='watch-episodes'], [data-tv-group='watch-episode-row']"));
+
+      const isPlayPause = REMOTE_PLAY_PAUSE_CODES.has(code) || ["Enter", "OK", "Select", "MediaPlayPause", "Center"].includes(key);
+      const isPause = REMOTE_PAUSE_CODES.has(code) || key === "MediaPause";
+      const isSeekForward = REMOTE_SEEK_FORWARD_CODES.has(code) || ["MediaFastForward", "FastForward"].includes(key);
+      const isSeekBack = REMOTE_SEEK_BACK_CODES.has(code) || ["MediaRewind", "Rewind"].includes(key);
+      const isArrowSeek = (key === "ArrowLeft" || key === "ArrowRight") && !inEpisodeRail;
+
+      if (!(isPlayPause || isPause || isSeekForward || isSeekBack || isArrowSeek)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      showControlsNow();
+
+      if (isPause) {
+        const v = videoRef.current;
+        if (v && !v.paused) v.pause();
+        return;
+      }
+
+      if (isPlayPause) {
+        void togglePlayPause();
+        return;
+      }
+
+      if (isSeekForward || key === "ArrowRight") {
+        seekBy(10);
+        return;
+      }
+
+      if (isSeekBack || key === "ArrowLeft") {
+        seekBy(-10);
+      }
+    };
+
+    window.addEventListener("keydown", onRemoteControls, true);
+    return () => window.removeEventListener("keydown", onRemoteControls, true);
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => {
+      playPauseButtonRef.current?.focus();
+    }, 120);
+    return () => window.clearTimeout(focusTimer);
+  }, [id]);
+
   useEffect(() => {
     return () => {
       clearHideControlsTimer();
@@ -557,7 +615,7 @@ export default function WatchPage() {
                       <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(-10)}>
                         <RotateCcw className="w-5 h-5" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" data-tv-autofocus="true" onClick={() => void togglePlayPause()}>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" data-tv-autofocus="true" ref={playPauseButtonRef} onClick={() => void togglePlayPause()}>
                         {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                       </Button>
                       <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(10)}>
