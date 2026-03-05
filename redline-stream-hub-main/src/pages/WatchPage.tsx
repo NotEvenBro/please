@@ -7,8 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 
-async function tryRequestFullscreen(video: HTMLVideoElement) {
-  const v = video as HTMLVideoElement & {
+async function tryRequestFullscreen(target: HTMLElement) {
+  const v = target as HTMLElement & {
     webkitRequestFullscreen?: () => Promise<void> | void;
     msRequestFullscreen?: () => Promise<void> | void;
   };
@@ -75,6 +75,7 @@ export default function WatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerShellRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<any>(null);
   const autoFallbackRef = useRef({ manifestToDirectDone: false, directToTranscodeDone: false });
   const hideChromeTimerRef = useRef<number | null>(null);
@@ -158,7 +159,7 @@ export default function WatchPage() {
 
     if (v.paused) {
       showControlsNow();
-      await tryRequestFullscreen(v);
+      await tryRequestFullscreen(playerShellRef.current ?? v);
       await v.play().catch(() => {
         setVideoError("Playback was blocked by the browser. Try pressing play again.");
       });
@@ -425,7 +426,7 @@ export default function WatchPage() {
 
     const onPlay = () => {
       setIsPlaying(true);
-      void tryRequestFullscreen(v);
+      void tryRequestFullscreen(playerShellRef.current ?? v);
       scheduleControlsHide();
     };
 
@@ -606,6 +607,7 @@ export default function WatchPage() {
             ) : null}
 
             <div
+              ref={playerShellRef}
               className="relative rounded-2xl overflow-hidden border border-primary/35 bg-black shadow-[0_0_50px_rgba(220,38,38,0.28)]"
               onMouseMove={showControlsNow}
               onPointerMove={showControlsNow}
@@ -712,7 +714,7 @@ export default function WatchPage() {
                           } else {
                             const v = videoRef.current;
                             if (!v) return;
-                            void tryRequestFullscreen(v);
+                            void tryRequestFullscreen(playerShellRef.current ?? v);
                           }
                         }}
                       >
