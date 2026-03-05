@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/streaming/Layout";
-import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize, Minimize, RotateCcw, RotateCw } from "lucide-react";
+import { ExternalLink, Loader2, AlertCircle, Play, Pause, Maximize, Minimize, RotateCcw, RotateCw, Volume2, VolumeX, Settings, ListVideo, SkipForward, Captions, AudioLines } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
@@ -68,6 +68,8 @@ const REMOTE_PLAY_PAUSE_CODES = new Set([13, 23, 66, 179, 415, 19]);
 const REMOTE_PAUSE_CODES = new Set([19]);
 const REMOTE_SEEK_FORWARD_CODES = new Set([417, 228]);
 const REMOTE_SEEK_BACK_CODES = new Set([412, 227]);
+const REMOTE_VOLUME_UP_CODES = new Set([447, 175]);
+const REMOTE_VOLUME_DOWN_CODES = new Set([448, 174]);
 
 export default function WatchPage() {
   const { id } = useParams();
@@ -91,10 +93,23 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const directStreamUrl = id ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}` : "";
-  const transcodeStreamUrl = id
-    ? `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1`
-    : "";
+  const [subtitleMode, setSubtitleMode] = useState<"auto" | "off">("auto");
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [volume, setVolume] = useState(1);
+  const [showSeasonPanel, setShowSeasonPanel] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+
+  const directStreamUrl = useMemo(() => {
+    if (!id) return "";
+    const subtitle = subtitleMode === "off" ? "&subtitle=off" : "";
+    return `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}${subtitle}`;
+  }, [id, kind, subtitleMode]);
+
+  const transcodeStreamUrl = useMemo(() => {
+    if (!id) return "";
+    const subtitle = subtitleMode === "off" ? "&subtitle=off" : "";
+    return `/api/jellyfin/stream/${encodeURIComponent(id)}?kind=${encodeURIComponent(kind)}&preferTranscode=1${subtitle}`;
+  }, [id, kind, subtitleMode]);
 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hlsDebug, setHlsDebug] = useState<string | null>(null);
@@ -114,6 +129,8 @@ export default function WatchPage() {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
   const episodesQ = useSeasonEpisodes(selectedSeasonId ?? undefined);
   const episodes = episodesQ.data?.Items ?? [];
+  const currentEpisodeIndex = episodes.findIndex((ep) => ep.Id === id);
+  const nextEpisode = currentEpisodeIndex >= 0 ? episodes[currentEpisodeIndex + 1] : null;
 
   const clearHideControlsTimer = () => {
     if (hideChromeTimerRef.current != null) {
@@ -188,6 +205,19 @@ export default function WatchPage() {
     setVideoError(null);
     setHlsDebug(null);
   }, [directStreamUrl, transcodeStreamUrl, isViddaEdge]);
+
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.volume = Math.min(1, Math.max(0, volume));
+  }, [volume]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   useEffect(() => {
     autoFallbackRef.current = { manifestToDirectDone: false, directToTranscodeDone: false };
@@ -462,12 +492,24 @@ export default function WatchPage() {
       const isSeekForward = REMOTE_SEEK_FORWARD_CODES.has(code) || ["MediaFastForward", "FastForward"].includes(key);
       const isSeekBack = REMOTE_SEEK_BACK_CODES.has(code) || ["MediaRewind", "Rewind"].includes(key);
       const isArrowSeek = (key === "ArrowLeft" || key === "ArrowRight") && !inEpisodeRail;
+      const isVolumeUp = REMOTE_VOLUME_UP_CODES.has(code) || key === "AudioVolumeUp";
+      const isVolumeDown = REMOTE_VOLUME_DOWN_CODES.has(code) || key === "AudioVolumeDown";
 
-      if (!(isPlayPause || isPause || isSeekForward || isSeekBack || isArrowSeek)) return;
+      if (!(isPlayPause || isPause || isSeekForward || isSeekBack || isArrowSeek || isVolumeUp || isVolumeDown)) return;
 
       e.preventDefault();
       e.stopPropagation();
       showControlsNow();
+
+      if (isVolumeUp) {
+        setVolume((v) => Math.min(1, Number((v + 0.1).toFixed(2))));
+        return;
+      }
+
+      if (isVolumeDown) {
+        setVolume((v) => Math.max(0, Number((v - 0.1).toFixed(2))));
+        return;
+      }
 
       if (isPause) {
         const v = videoRef.current;
@@ -621,27 +663,85 @@ export default function WatchPage() {
                       <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => seekBy(10)}>
                         <RotateCw className="w-5 h-5" />
                       </Button>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => setVolume((v) => (v > 0 ? 0 : 1))}>
+                        {volume > 0 ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                      </Button>
+                      <input
+                        tabIndex={-1}
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={volume}
+                        onChange={(e) => setVolume(Number(e.target.value))}
+                        className="w-20 accent-red-500"
+                        aria-label="Volume"
+                      />
                       <span className="text-xs md:text-sm text-white/90 tabular-nums">
                         {formatTime(currentTime)} / {formatTime(duration)}
                       </span>
                     </div>
 
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="focusable text-white hover:bg-white/20"
-                      onClick={() => {
-                        if (isFullscreen) {
-                          void tryExitFullscreen();
-                        } else {
-                          const v = videoRef.current;
-                          if (!v) return;
-                          void tryRequestFullscreen(v);
-                        }
-                      }}
-                    >
-                      {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-                    </Button>
+                    <div className="flex items-center gap-2" data-tv-group="watch-controls-extra">
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => nextEpisode?.Id && navigate(`/watch/${nextEpisode.Id}`)} disabled={!nextEpisode}>
+                        <SkipForward className="w-5 h-5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => setShowSeasonPanel((x) => !x)}>
+                        <ListVideo className="w-5 h-5" />
+                      </Button>
+                      <Select value={String(playbackRate)} onValueChange={(v) => setPlaybackRate(Number(v))}>
+                        <SelectTrigger className="focusable h-8 w-20 text-xs bg-black/30 border-white/20">
+                          <SelectValue placeholder="Speed" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                            <SelectItem key={rate} value={String(rate)}>{rate}x</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="icon" variant="ghost" className="focusable text-white hover:bg-white/20" onClick={() => setShowSettingsPanel((x) => !x)}>
+                        <Settings className="w-5 h-5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="focusable text-white hover:bg-white/20"
+                        onClick={() => {
+                          if (isFullscreen) {
+                            void tryExitFullscreen();
+                          } else {
+                            const v = videoRef.current;
+                            if (!v) return;
+                            void tryRequestFullscreen(v);
+                          }
+                        }}
+                      >
+                        {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                      </Button>
+                    </div>
+
+                  {showSettingsPanel ? (
+                    <div className="absolute right-4 bottom-24 w-64 rounded-xl border border-white/20 bg-black/90 p-3 space-y-3" data-tv-group="watch-settings">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-white"><AudioLines className="w-4 h-4" /> Audio</div>
+                      <div className="text-xs text-white/70">Default track (server selected)</div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-white"><Captions className="w-4 h-4" /> Subtitles</div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant={subtitleMode === "auto" ? "default" : "secondary"} className="focusable" onClick={() => setSubtitleMode("auto")}>Auto</Button>
+                        <Button size="sm" variant={subtitleMode === "off" ? "default" : "secondary"} className="focusable" onClick={() => setSubtitleMode("off")}>Off</Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {showSeasonPanel ? (
+                    <div className="absolute right-4 bottom-24 w-80 max-h-[45vh] overflow-auto rounded-xl border border-white/20 bg-black/90 p-3 space-y-2" data-tv-group="watch-season-panel">
+                      <div className="text-sm font-semibold text-white">Season & Episodes</div>
+                      {episodes.map((ep) => (
+                        <button key={ep.Id} className="focusable w-full text-left text-sm rounded px-2 py-2 hover:bg-white/10" onClick={() => navigate(`/watch/${ep.Id}`)}>
+                          {ep.IndexNumber != null ? `E${ep.IndexNumber}: ` : ""}{ep.Name || "Episode"}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   </div>
                 </div>
               </div>
