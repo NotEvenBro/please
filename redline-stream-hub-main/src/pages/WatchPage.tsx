@@ -85,6 +85,8 @@ export default function WatchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const seekRef = useRef<HTMLInputElement>(null);
   const playPauseButtonRef = useRef<HTMLButtonElement>(null);
+  const seasonButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const hlsRef = useRef<any>(null);
   const hideChromeTimerRef = useRef<number | null>(null);
   const lastProgressSaveSecRef = useRef(0);
@@ -192,6 +194,25 @@ export default function WatchPage() {
     } catch {
       // best-effort persistence
     }
+  };
+
+  const focusFirstInPanel = (panelGroup: "watch-settings" | "watch-season-panel") => {
+    window.setTimeout(() => {
+      const first = document.querySelector<HTMLElement>(`[data-tv-group='${panelGroup}'] .focusable`);
+      first?.focus();
+    }, 0);
+  };
+
+  const openSeasonPanel = () => {
+    setShowSeasonPanel(true);
+    setShowSettingsPanel(false);
+    focusFirstInPanel("watch-season-panel");
+  };
+
+  const openSettingsPanel = () => {
+    setShowSettingsPanel(true);
+    setShowSeasonPanel(false);
+    focusFirstInPanel("watch-settings");
   };
 
   useEffect(() => {
@@ -348,7 +369,7 @@ export default function WatchPage() {
       if (!autoNextTriggeredRef.current && nextEpisode?.Id && remaining <= 30) {
         autoNextTriggeredRef.current = true;
         void persistProgress(true);
-        navigate(`/watch/${nextEpisode.Id}`);
+        navigate(`/watch/${nextEpisode.Id}`, { replace: true });
       }
     };
 
@@ -365,7 +386,7 @@ export default function WatchPage() {
     const onEnded = () => {
       void persistProgress(true);
       if (nextEpisode?.Id) {
-        navigate(`/watch/${nextEpisode.Id}`);
+        navigate(`/watch/${nextEpisode.Id}`, { replace: true });
       }
     };
 
@@ -441,6 +462,16 @@ export default function WatchPage() {
 
       if (e.key === "ArrowUp") {
         showControlsNow();
+        if (active === seasonButtonRef.current) {
+          e.preventDefault();
+          openSeasonPanel();
+          return;
+        }
+        if (active === settingsButtonRef.current) {
+          e.preventDefault();
+          openSettingsPanel();
+          return;
+        }
         if (active?.dataset.watchControl === "row") {
           e.preventDefault();
           seekRef.current?.focus();
@@ -604,27 +635,50 @@ export default function WatchPage() {
                   variant="ghost"
                   className="focusable text-white hover:bg-white/20"
                   data-watch-control="row"
-                  onClick={() => nextEpisode?.Id && navigate(`/watch/${nextEpisode.Id}`)}
+                  onClick={() => nextEpisode?.Id && navigate(`/watch/${nextEpisode.Id}`, { replace: true })}
                   disabled={!nextEpisode}
                 >
                   <SkipForward className="h-5 w-5" />
                 </Button>
                 <Button
+                  ref={seasonButtonRef}
                   size="icon"
                   variant="ghost"
                   className="focusable text-white hover:bg-white/20"
                   data-watch-control="row"
-                  onClick={() => setShowSeasonPanel((x) => !x)}
-                  onMouseEnter={() => setShowSeasonPanel(true)}
+                  onClick={() => {
+                    setShowSeasonPanel((x) => {
+                      const next = !x;
+                      if (next) {
+                        setShowSettingsPanel(false);
+                        focusFirstInPanel("watch-season-panel");
+                      }
+                      return next;
+                    });
+                  }}
+                  onMouseEnter={() => {
+                    setShowSeasonPanel(true);
+                    setShowSettingsPanel(false);
+                  }}
                 >
                   <ListVideo className="h-5 w-5" />
                 </Button>
                 <Button
+                  ref={settingsButtonRef}
                   size="icon"
                   variant="ghost"
                   className="focusable text-white hover:bg-white/20"
                   data-watch-control="row"
-                  onClick={() => setShowSettingsPanel((x) => !x)}
+                  onClick={() => {
+                    setShowSettingsPanel((x) => {
+                      const next = !x;
+                      if (next) {
+                        setShowSeasonPanel(false);
+                        focusFirstInPanel("watch-settings");
+                      }
+                      return next;
+                    });
+                  }}
                 >
                   <Settings className="h-5 w-5" />
                 </Button>
@@ -681,17 +735,34 @@ export default function WatchPage() {
 
           {showSeasonPanel ? (
             <div
-              className="absolute bottom-24 right-4 z-20 max-h-[45vh] w-80 space-y-2 overflow-auto rounded-xl border border-white/20 bg-black/90 p-3"
+              className="absolute bottom-24 right-4 z-20 max-h-[45vh] w-[26rem] space-y-2 overflow-auto rounded-xl border border-white/20 bg-black/65 backdrop-blur-md p-3"
               data-tv-group="watch-season-panel"
               onMouseLeave={() => setShowSeasonPanel(false)}
             >
               <div className="text-sm font-semibold text-white">Season & Episodes</div>
-              {episodes.map((ep) => (
-                <button key={ep.Id} className="focusable w-full rounded px-2 py-2 text-left text-sm hover:bg-white/10" onClick={() => navigate(`/watch/${ep.Id}`)}>
-                  {ep.IndexNumber != null ? `E${ep.IndexNumber}: ` : ""}
-                  {ep.Name || "Episode"}
-                </button>
-              ))}
+              {episodes.map((ep) => {
+                const ui = jellyfinToMediaUI(ep, { posterWidth: 360, backdropWidth: 800 });
+                const isCurrent = ep.Id === id;
+                return (
+                  <button
+                    key={ep.Id}
+                    className={`focusable w-full rounded-md border px-2 py-2 text-left text-sm transition-colors ${isCurrent ? "border-primary/60 bg-primary/15" : "border-white/10 bg-black/20 hover:bg-white/10"}`}
+                    onClick={() => navigate(`/watch/${ep.Id}`, { replace: true })}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="h-12 w-20 overflow-hidden rounded bg-black/30">
+                        <img src={ui.backdropUrl ?? ui.posterUrl ?? ""} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-white/95">
+                          {ep.IndexNumber != null ? `E${ep.IndexNumber}: ` : ""}
+                          {ep.Name || "Episode"}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : null}
         </div>

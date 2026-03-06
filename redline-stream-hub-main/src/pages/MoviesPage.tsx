@@ -57,9 +57,9 @@ export default function MoviesPage() {
 
         <div className="mt-10">
           <h2 className="text-lg sm:text-xl font-bold text-foreground mb-4">All Movies</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {movies.map((it) => (
-              <MediaCard key={it.id} item={it} onClick={() => setSelected(it)} showRating={sort === "rating"} />
+              <MediaCard key={it.id} item={it} onClick={() => setSelected(it)} showRating={sort === "rating"} fluid />
             ))}
           </div>
         </div>

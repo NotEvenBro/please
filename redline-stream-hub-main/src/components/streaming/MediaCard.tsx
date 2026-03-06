@@ -9,10 +9,11 @@ interface MediaCardProps {
   showRating?: boolean;
   focused?: boolean;
   autofocus?: boolean;
+  fluid?: boolean;
 }
 
 const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
-  ({ item, onClick, showProgress, showRating, focused, autofocus }, ref) => {
+  ({ item, onClick, showProgress, showRating, focused, autofocus, fluid }, ref) => {
     const subtitle =
       item.kind === "Track"
         ? item.artist ?? item.album
@@ -34,7 +35,7 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
           "transition-transform duration-200 ease-out will-change-transform",
           focused ? "z-10 scale-110 border-white/50 shadow-[0_16px_40px_rgba(0,0,0,0.65)]" : "scale-100",
         ].join(" ")}
-        style={{ width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
+        style={fluid ? { width: "100%", aspectRatio: "16/9" } : { width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
         onClick={() => onClick?.(item)}
         aria-label={subtitle ? `${item.title} — ${subtitle}` : item.title}
         data-tv-autofocus={autofocus ? "true" : undefined}
