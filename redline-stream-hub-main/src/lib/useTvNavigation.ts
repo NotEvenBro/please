@@ -224,10 +224,21 @@ export function useTvNavigation(enabled = true) {
         const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
         const activeGroup = getGroupKey(active);
 
+        if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
+          const rect = active.getBoundingClientRect();
+          if (rect.top <= 220) {
+            focusTopNav();
+            return;
+          }
+        }
+
         // Keep horizontal focus locked within top nav so it doesn't spill into content.
+        const activeRail = active.closest(".rail-scroll");
         const directionalPool =
           activeGroup === "top-nav" && (dir === "left" || dir === "right")
             ? getTopNavItems(items)
+            : activeRail && (dir === "left" || dir === "right")
+            ? items.filter((it) => it.closest(".rail-scroll") === activeRail)
             : (dir === "left" || dir === "right")
             ? items.filter((it) => getGroupKey(it) === activeGroup)
             : items.filter((it) => getGroupKey(it) !== "top-nav");
@@ -281,9 +292,6 @@ export function useTvNavigation(enabled = true) {
             edge.focus();
             ensureVisible(edge);
           }
-        } else if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
-          // Allow jumping to top-nav from any page when near the top.
-          focusTopNav();
         }
         return;
       }
