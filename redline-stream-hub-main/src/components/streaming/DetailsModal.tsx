@@ -4,11 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MediaCard from "./MediaCard";
 import type { MediaItemUI } from "@/types/media";
-import { useRecentMovies, useSeries, useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
+import { useRecentMovies, useSeries, useItem, useSeriesSeasons, useSeasonEpisodes, rateItem, clearItemRating } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { setLocalStars, useRatingsVersion } from "@/lib/localRating";
 
 interface DetailsModalProps {
   item: MediaItemUI | null;
@@ -46,7 +45,6 @@ function formatDuration(minutes?: number) {
 }
 
 export default function DetailsModal({ item, onClose }: DetailsModalProps) {
-  const _ratingsVersion = useRatingsVersion();
   const qc = useQueryClient();
   const [ratingDraft, setRatingDraft] = useState<number>(0);
   const [ratingSaving, setRatingSaving] = useState(false);
@@ -79,7 +77,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
   useEffect(() => {
     if (!effective) return;
-    setRatingDraft(effective.userStars ?? 0);
+    setRatingDraft(typeof effective.rating === "number" ? Math.round(effective.rating / 2) : 0);
     setRatingError(null);
     setRatingOpen(false);
   }, [effective?.id]);
@@ -239,8 +237,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                                 setRatingSaving(true);
                                 setRatingError(null);
                                 setRatingDraft(v);
-                                setLocalStars(effective.id, v);
-                                // just to refresh any cached lists so UI updates immediately
+                                await rateItem(effective.id, v * 2);
                                 await qc.invalidateQueries({ queryKey: ["jellyfin"] });
                               } catch (e: any) {
                                 setRatingError(e?.message ?? "Failed to save rating");
@@ -264,7 +261,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                               setRatingSaving(true);
                               setRatingError(null);
                               setRatingDraft(0);
-                              setLocalStars(effective.id, null);
+                              await clearItemRating(effective.id);
                               await qc.invalidateQueries({ queryKey: ["jellyfin"] });
                             } catch (e: any) {
                               setRatingError(e?.message ?? "Failed to clear rating");
@@ -280,7 +277,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
                     {ratingError && <div className="text-sm text-destructive">{ratingError}</div>}
                     <div className="text-xs text-muted-foreground">
-                      Ratings are saved locally on this device.
+                      Ratings are synced through Jellyfin for your account.
                     </div>
                   </div>
                   </div>

@@ -18,7 +18,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useItem, useSeasonEpisodes, useSeriesSeasons } from "@/hooks/use-jellyfin";
+import { savePlaybackProgress, useItem, useSeasonEpisodes, useSeriesSeasons } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 
 async function tryRequestFullscreen(target: HTMLElement) {
@@ -87,6 +87,8 @@ export default function WatchPage() {
   const playPauseButtonRef = useRef<HTMLButtonElement>(null);
   const hlsRef = useRef<any>(null);
   const hideChromeTimerRef = useRef<number | null>(null);
+  const lastProgressSaveSecRef = useRef(0);
+  const autoNextTriggeredRef = useRef(false);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
   const media = useMemo(
@@ -95,7 +97,7 @@ export default function WatchPage() {
   );
 
   const kind = media?.kind ?? "Movie";
-  const [subtitleMode, setSubtitleMode] = useState<"auto" | "off">("auto");
+  const [subtitleMode, setSubtitleMode] = useState<"auto" | "off">("off");
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
   const [showSeasonPanel, setShowSeasonPanel] = useState(false);
@@ -180,6 +182,18 @@ export default function WatchPage() {
     showControlsNow();
   };
 
+  const persistProgress = async (played = false) => {
+    if (!id) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const positionTicks = Math.round((v.currentTime || 0) * 10_000_000);
+    try {
+      await savePlaybackProgress(id, positionTicks, played);
+    } catch {
+      // best-effort persistence
+    }
+  };
+
   useEffect(() => {
     const isVidda = isViddaEdgeDevice();
     const next = isLikelyTvDevice() && !isVidda ? transcodeStreamUrl || directStreamUrl : directStreamUrl;
@@ -201,6 +215,8 @@ export default function WatchPage() {
   }, [playbackRate]);
 
   useEffect(() => {
+    autoNextTriggeredRef.current = false;
+    lastProgressSaveSecRef.current = 0;
     setShowControls(true);
     setCurrentTime(0);
     setDuration(0);
@@ -314,24 +330,59 @@ export default function WatchPage() {
       setIsPlaying(false);
       setShowControls(true);
       clearHideControlsTimer();
+      void persistProgress(false);
     };
     const onTime = () => {
-      setCurrentTime(v.currentTime || 0);
-      setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+      const nowTime = v.currentTime || 0;
+      const nowDuration = Number.isFinite(v.duration) ? v.duration : 0;
+      setCurrentTime(nowTime);
+      setDuration(nowDuration);
+
+      const sec = Math.floor(nowTime);
+      if (sec - lastProgressSaveSecRef.current >= 5) {
+        lastProgressSaveSecRef.current = sec;
+        void persistProgress(false);
+      }
+
+      const remaining = nowDuration > 0 ? nowDuration - nowTime : Number.POSITIVE_INFINITY;
+      if (!autoNextTriggeredRef.current && nextEpisode?.Id && remaining <= 30) {
+        autoNextTriggeredRef.current = true;
+        void persistProgress(true);
+        navigate(`/watch/${nextEpisode.Id}`);
+      }
+    };
+
+    const onLoadedMetadata = () => {
+      onTime();
+      const resumeTicks = itemDetails?.UserData?.PlaybackPositionTicks ?? 0;
+      if (resumeTicks > 0) {
+        const resumeSec = Math.max(0, Math.floor(resumeTicks / 10_000_000));
+        const maxSeek = Number.isFinite(v.duration) ? Math.max(0, v.duration - 31) : resumeSec;
+        v.currentTime = Math.min(resumeSec, maxSeek);
+      }
+    };
+
+    const onEnded = () => {
+      void persistProgress(true);
+      if (nextEpisode?.Id) {
+        navigate(`/watch/${nextEpisode.Id}`);
+      }
     };
 
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
     v.addEventListener("timeupdate", onTime);
-    v.addEventListener("loadedmetadata", onTime);
+    v.addEventListener("loadedmetadata", onLoadedMetadata);
+    v.addEventListener("ended", onEnded);
 
     return () => {
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
       v.removeEventListener("timeupdate", onTime);
-      v.removeEventListener("loadedmetadata", onTime);
+      v.removeEventListener("loadedmetadata", onLoadedMetadata);
+      v.removeEventListener("ended", onEnded);
     };
-  }, [isPlaying]);
+  }, [isPlaying, itemDetails?.UserData?.PlaybackPositionTicks, navigate, nextEpisode?.Id]);
 
   useEffect(() => {
     const shell = playerShellRef.current;
@@ -405,6 +456,17 @@ export default function WatchPage() {
       if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isSeekFocused) {
         e.preventDefault();
         seekBy(e.key === "ArrowLeft" ? -10 : 10);
+        return;
+      }
+
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && active?.dataset.watchControl === "row") {
+        const rowControls = Array.from(document.querySelectorAll<HTMLElement>("[data-watch-control='row'].focusable"));
+        const idx = rowControls.indexOf(active);
+        if (idx >= 0) {
+          e.preventDefault();
+          const nextIdx = e.key === "ArrowLeft" ? Math.max(0, idx - 1) : Math.min(rowControls.length - 1, idx + 1);
+          rowControls[nextIdx]?.focus();
+        }
       }
     };
 
@@ -415,6 +477,17 @@ export default function WatchPage() {
   useEffect(() => {
     const t = window.setTimeout(() => playPauseButtonRef.current?.focus(), 250);
     return () => window.clearTimeout(t);
+  }, [id]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      void persistProgress(false);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      void persistProgress(false);
+    };
   }, [id]);
 
   return (

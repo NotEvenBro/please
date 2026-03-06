@@ -134,7 +134,7 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
 
     // Keep focus movement local for smoother TV UX.
     const sameGroup = getGroupKey(el) === currentGroup;
-    const groupPenalty = sameGroup ? 0 : (dir === "left" || dir === "right" ? 240 : 45);
+    const groupPenalty = sameGroup ? 0 : (dir === "left" || dir === "right" ? 1200 : 90);
     const score = primary * 10 + secondary + groupPenalty;
 
     candidates.push({ el, score });
@@ -228,6 +228,8 @@ export function useTvNavigation(enabled = true) {
         const directionalPool =
           activeGroup === "top-nav" && (dir === "left" || dir === "right")
             ? getTopNavItems(items)
+            : (dir === "left" || dir === "right")
+            ? items.filter((it) => getGroupKey(it) === activeGroup)
             : items.filter((it) => getGroupKey(it) !== "top-nav");
 
         if (dir === "down" && getGroupKey(active) === "watch-controls") {
@@ -240,7 +242,9 @@ export function useTvNavigation(enabled = true) {
         }
 
         if (dir === "down" && getGroupKey(active) === "details-actions") {
-          const episodeTarget = getFirstFocusableInGroup("details-episodes");
+          const episodeTarget =
+            document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-episode-column-item='true'].focusable") ||
+            getFirstFocusableInGroup("details-episodes");
           if (episodeTarget) {
             episodeTarget.focus();
             ensureVisible(episodeTarget);
@@ -277,8 +281,8 @@ export function useTvNavigation(enabled = true) {
             edge.focus();
             ensureVisible(edge);
           }
-        } else if (dir === "up" && getScope() === (document.querySelector("main") ?? document.body) && isNearTopOfPage()) {
-          // Only jump to top-nav when page is actually at the top.
+        } else if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
+          // Allow jumping to top-nav from any page when near the top.
           focusTopNav();
         }
         return;

@@ -405,6 +405,21 @@ app.get('/api/jellyfin/recent/episodes', (req, res) => {
   );
 });
 
+app.get('/api/jellyfin/continue-watching', (req, res) => {
+  const limit = parseInt(req.query.limit, 10) || 30;
+  const path =
+    `/Users/${encodeURIComponent(config.jellyfinUserId)}/Items` +
+    `?IncludeItemTypes=Episode,Movie` +
+    `&Recursive=true` +
+    `&Filters=IsResumable` +
+    `&SortBy=DatePlayed` +
+    `&SortOrder=Descending` +
+    `&Limit=${limit}` +
+    `&Fields=Overview,PrimaryImageAspectRatio,ProductionYear,UserData,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber` +
+    `&ImageTypeLimit=1&EnableImageTypes=Primary`;
+  proxyJellyfin(path, res);
+});
+
 app.get('/api/jellyfin/movies', (req, res) => {
   const startIndex = parseInt(req.query.startIndex, 10) || 0;
   const limit = parseInt(req.query.limit, 10) || 30;
@@ -444,10 +459,22 @@ app.get('/api/jellyfin/series', (req, res) => {
 
 app.post('/api/jellyfin/rate/:id', (req, res) => {
   const itemId = encodeURIComponent(req.params.id);
-  const rating = Math.round(Number(req.body?.rating));
+  const rawRating = req.body?.rating;
+
+  if (rawRating == null) {
+    return proxyJellyfinRequest(
+      `/Users/${encodeURIComponent(config.jellyfinUserId)}/Items/${itemId}/Rating`,
+      req,
+      res,
+      'DELETE'
+    );
+  }
+
+  const rating = Math.round(Number(rawRating));
   if (!Number.isFinite(rating) || rating < 0 || rating > 10) {
     return res.status(400).json({ error: 'Invalid rating', details: 'rating must be a number between 0 and 10' });
   }
+
   const body = JSON.stringify({ Rating: rating });
   proxyJellyfinRequest(
     `/Users/${encodeURIComponent(config.jellyfinUserId)}/Items/${itemId}/UserData`,
@@ -459,7 +486,33 @@ app.post('/api/jellyfin/rate/:id', (req, res) => {
   );
 });
 
+app.post('/api/jellyfin/progress/:id', (req, res) => {
+  const itemId = encodeURIComponent(req.params.id);
+  const positionTicks = Number(req.body?.positionTicks ?? 0);
+  const played = Boolean(req.body?.played);
+
+  if (!Number.isFinite(positionTicks) || positionTicks < 0) {
+    return res.status(400).json({ error: 'Invalid positionTicks' });
+  }
+
+  const body = JSON.stringify({
+    PlaybackPositionTicks: Math.round(positionTicks),
+    Played: played,
+    PlayCount: played ? 1 : 0,
+  });
+
+  proxyJellyfinRequest(
+    `/Users/${encodeURIComponent(config.jellyfinUserId)}/Items/${itemId}/UserData`,
+    req,
+    res,
+    'POST',
+    body,
+    { 'Content-Type': 'application/json' }
+  );
+});
+
 app.get('/api/jellyfin/music/recent', (req, res) => {
+
   const limit = parseInt(req.query.limit, 10) || 30;
   const parentId = req.query.parentId ? encodeURIComponent(req.query.parentId) : null;
 

@@ -3,29 +3,28 @@ import Layout from "@/components/streaming/Layout";
 import Hero from "@/components/streaming/Hero";
 import RailCarousel from "@/components/streaming/RailCarousel";
 import DetailsModal from "@/components/streaming/DetailsModal";
-import { useRecentMovies, useRecentEpisodes, useMovies, useSeries } from "@/hooks/use-jellyfin";
+import { useContinueWatching, useRecentMovies, useMovies, useSeries } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 import type { MediaItemUI } from "@/types/media";
 import { Loader2, AlertCircle } from "lucide-react";
-import { useRatingsVersion } from "@/lib/localRating";
 
 const Index = () => {
   const [selectedItem, setSelectedItem] = useState<MediaItemUI | null>(null);
 
   const recentMoviesQ = useRecentMovies(24);
-  const recentEpisodesQ = useRecentEpisodes(24);
+  const continueWatchingQ = useContinueWatching(24);
   const moviesQ = useMovies(0, 24, "");
   const seriesQ = useSeries(0, 24, "");
 
   const recentMovies = useMemo(() => (recentMoviesQ.data ?? []).map((x) => jellyfinToMediaUI(x)), [recentMoviesQ.data]);
-  const recentEpisodes = useMemo(() => (recentEpisodesQ.data ?? []).map((x) => jellyfinToMediaUI(x)), [recentEpisodesQ.data]);
+  const continueWatching = useMemo(() => (continueWatchingQ.data ?? []).map((x) => jellyfinToMediaUI(x)), [continueWatchingQ.data]);
   const movies = useMemo(() => (moviesQ.data?.Items ?? []).map((x) => jellyfinToMediaUI(x)), [moviesQ.data]);
   const series = useMemo(() => (seriesQ.data?.Items ?? []).map((x) => jellyfinToMediaUI(x)), [seriesQ.data]);
 
   const featured = recentMovies[0] ?? movies[0] ?? series[0] ?? null;
 
-  const isLoading = recentMoviesQ.isLoading || recentEpisodesQ.isLoading || moviesQ.isLoading || seriesQ.isLoading;
-  const isError = recentMoviesQ.isError || recentEpisodesQ.isError || moviesQ.isError || seriesQ.isError;
+  const isLoading = recentMoviesQ.isLoading || continueWatchingQ.isLoading || moviesQ.isLoading || seriesQ.isLoading;
+  const isError = recentMoviesQ.isError || continueWatchingQ.isError || moviesQ.isError || seriesQ.isError;
 
   return (
     <Layout>
@@ -58,17 +57,17 @@ const Index = () => {
         )}
 
         <div className="space-y-12 pb-16">
-          {recentEpisodes.length > 0 && (
-            <RailCarousel title="Continue Watching" titleLink="/tv" items={recentEpisodes} onItemSelect={setSelectedItem} showProgress />
+          {continueWatching.length > 0 && (
+            <RailCarousel title="Continue watching" titleLink="/tv" items={continueWatching} onItemSelect={setSelectedItem} showProgress />
           )}
-
-          {series.length > 0 && <RailCarousel title="Binge-worthy Shows" titleLink="/tv" items={series} onItemSelect={setSelectedItem} />}
-
-          {movies.length > 0 && <RailCarousel title="Popular Movies" titleLink="/movies" items={movies} onItemSelect={setSelectedItem} />}
 
           {recentMovies.length > 0 && (
-            <RailCarousel title="New This Week" titleLink="/movies" items={recentMovies} onItemSelect={setSelectedItem} />
+            <RailCarousel title="Recently Added" titleLink="/movies" items={recentMovies} onItemSelect={setSelectedItem} />
           )}
+
+          {series.length > 0 && <RailCarousel title="Shows" titleLink="/tv" items={series} onItemSelect={setSelectedItem} />}
+
+          {movies.length > 0 && <RailCarousel title="Movies" titleLink="/movies" items={movies} onItemSelect={setSelectedItem} />}
         </div>
       </div>
 
