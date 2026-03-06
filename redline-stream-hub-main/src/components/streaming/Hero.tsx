@@ -26,14 +26,14 @@ export default function Hero({ item, onPlay, onDetails }: HeroProps) {
           loading="eager"
         />
         {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/35 to-transparent" />
       </div>
 
       {/* Content */}
-      <div className="absolute bottom-0 left-0 right-0 pb-16 tv-safe animate-fade-in">
-        <div className="max-w-2xl space-y-4">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight">
+      <div className="absolute bottom-0 left-0 right-0 pb-20 tv-safe animate-fade-in">
+        <div className="max-w-2xl space-y-5">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-tight drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
             {item.title}
           </h1>
 

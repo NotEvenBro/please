@@ -90,6 +90,21 @@
     border-radius: var(--radius);
   }
 
+
+  body[data-control-mode="tv"] {
+    cursor: none;
+  }
+
+  body[data-control-mode="pc"] .focusable:focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+
+  body[data-control-mode="tv"] .rail-scroll {
+    scroll-padding-left: calc(var(--tv-safe-margin) + 12px);
+    scroll-padding-right: calc(var(--tv-safe-margin) + 12px);
+  }
+
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -102,7 +117,7 @@
 @layer components {
   /* Rail/Carousel scroll container */
   .rail-scroll {
-    @apply flex gap-3 overflow-x-auto scroll-smooth;
+    @apply flex gap-2 overflow-x-auto scroll-smooth;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     -ms-overflow-style: none;

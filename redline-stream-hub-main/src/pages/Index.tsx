@@ -58,17 +58,17 @@ const Index = () => {
         )}
 
         <div className="space-y-12 pb-16">
-          {recentMovies.length > 0 && (
-            <RailCarousel title="Recently Added Movies" titleLink="/movies" items={recentMovies} onItemSelect={setSelectedItem} />
-          )}
-
           {recentEpisodes.length > 0 && (
-            <RailCarousel title="Recently Added Episodes" titleLink="/tv" items={recentEpisodes} onItemSelect={setSelectedItem} />
+            <RailCarousel title="Continue Watching" titleLink="/tv" items={recentEpisodes} onItemSelect={setSelectedItem} showProgress />
           )}
 
-          {movies.length > 0 && <RailCarousel title="Movies" titleLink="/movies" items={movies} onItemSelect={setSelectedItem} />}
+          {series.length > 0 && <RailCarousel title="Binge-worthy Shows" titleLink="/tv" items={series} onItemSelect={setSelectedItem} />}
 
-          {series.length > 0 && <RailCarousel title="Series" titleLink="/tv" items={series} onItemSelect={setSelectedItem} />}
+          {movies.length > 0 && <RailCarousel title="Popular Movies" titleLink="/movies" items={movies} onItemSelect={setSelectedItem} />}
+
+          {recentMovies.length > 0 && (
+            <RailCarousel title="New This Week" titleLink="/movies" items={recentMovies} onItemSelect={setSelectedItem} />
+          )}
         </div>
       </div>
 
