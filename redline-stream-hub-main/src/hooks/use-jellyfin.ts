@@ -50,7 +50,10 @@ export function useRecentEpisodes(limit = 20) {
 export function useContinueWatching(limit = 24) {
   return useQuery<JellyfinItem[]>({
     queryKey: ["jellyfin", "continue-watching", limit],
-    queryFn: () => fetchJson(`/api/jellyfin/continue-watching?limit=${limit}`),
+    queryFn: async () => {
+      const data = await fetchJson<JellyfinItemsResponse>(`/api/jellyfin/continue-watching?limit=${limit}`);
+      return data?.Items ?? [];
+    },
     retry: 1,
     staleTime: 15_000,
   });
