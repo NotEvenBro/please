@@ -405,8 +405,9 @@ app.get('/api/jellyfin/recent/episodes', (req, res) => {
   );
 });
 
-app.get('/api/jellyfin/continue-watching', (req, res) => {
+app.get('/api/jellyfin/continue-watching', async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 30;
+  const fetchLimit = Math.max(limit * 4, 80);
   const path =
     `/Users/${encodeURIComponent(config.jellyfinUserId)}/Items` +
     `?IncludeItemTypes=Episode,Movie` +
@@ -414,10 +415,29 @@ app.get('/api/jellyfin/continue-watching', (req, res) => {
     `&Filters=IsResumable` +
     `&SortBy=DatePlayed` +
     `&SortOrder=Descending` +
-    `&Limit=${limit}` +
-    `&Fields=Overview,PrimaryImageAspectRatio,ProductionYear,UserData,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber` +
+    `&Limit=${fetchLimit}` +
+    `&Fields=Overview,PrimaryImageAspectRatio,ProductionYear,UserData,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber,SeriesId` +
     `&ImageTypeLimit=1&EnableImageTypes=Primary`;
-  proxyJellyfin(path, res);
+
+  try {
+    const data = await proxyJellyfinJson(path);
+    const items = Array.isArray(data?.Items) ? data.Items : [];
+    const seen = new Set();
+    const deduped = [];
+
+    for (const it of items) {
+      const key = String(it?.SeriesId || it?.Id || "");
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(it);
+      if (deduped.length >= limit) break;
+    }
+
+    return res.json({ ...data, Items: deduped });
+  } catch (err) {
+    console.error('[ContinueWatching] failed', err?.message || err);
+    return res.status(502).json({ error: 'Continue watching unavailable', details: err?.message || String(err) });
+  }
 });
 
 app.get('/api/jellyfin/movies', (req, res) => {

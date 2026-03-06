@@ -116,10 +116,18 @@ function RailTile({
   scrollContainerRef: React.RefObject<HTMLDivElement>;
 }) {
   const tileKey = `${railKey}_ITEM_${idx}`;
+  const lastMediaId = typeof window !== "undefined" ? window.sessionStorage.getItem("redline:last-media-id") : null;
+
+  const handleSelect = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("redline:last-media-id", item.id);
+    }
+    onSelect?.(item);
+  };
 
   const { ref, focused } = useFocusable({
     focusKey: tileKey,
-    onEnterPress: () => onSelect?.(item),
+    onEnterPress: handleSelect,
     onFocus: () => {
       const el = ref.current as HTMLElement | null;
       const scroller = scrollContainerRef.current;
@@ -141,9 +149,10 @@ function RailTile({
       <MediaCard
         ref={ref as any}
         item={item}
-        onClick={onSelect}
+        onClick={handleSelect}
         showProgress={showProgress}
         focused={focused}
+        autofocus={lastMediaId === item.id}
       />
     </div>
   );

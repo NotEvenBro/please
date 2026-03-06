@@ -399,9 +399,13 @@ export default function WatchPage() {
         return;
       }
 
-      if (REMOTE_PLAY_PAUSE_CODES.has(keyCode) || ["Enter", " ", "MediaPlayPause"].includes(e.key)) {
+      if (REMOTE_PLAY_PAUSE_CODES.has(keyCode) || ["Enter", " ", "MediaPlayPause", "OK", "Select", "Center"].includes(e.key)) {
         e.preventDefault();
-        void togglePlayPause();
+        if (active?.classList.contains("focusable")) {
+          active.click();
+        } else {
+          void togglePlayPause();
+        }
         return;
       }
 

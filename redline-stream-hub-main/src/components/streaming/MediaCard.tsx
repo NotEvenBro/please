@@ -8,10 +8,11 @@ interface MediaCardProps {
   showProgress?: boolean;
   showRating?: boolean;
   focused?: boolean;
+  autofocus?: boolean;
 }
 
 const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
-  ({ item, onClick, showProgress, showRating, focused }, ref) => {
+  ({ item, onClick, showProgress, showRating, focused, autofocus }, ref) => {
     const subtitle =
       item.kind === "Track"
         ? item.artist ?? item.album
@@ -36,6 +37,7 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         style={{ width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
         onClick={() => onClick?.(item)}
         aria-label={subtitle ? `${item.title} — ${subtitle}` : item.title}
+        data-tv-autofocus={autofocus ? "true" : undefined}
       >
         <img
           src={item.backdropUrl ?? item.posterUrl ?? ""}
