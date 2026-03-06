@@ -56,6 +56,11 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
 
+  const rememberBrowsePath = () => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("redline:last-browse-path", `${window.location.pathname}${window.location.search}`);
+  };
+
   const { data: itemDetails } = useItem(item?.id);
   const effective = itemDetails ? jellyfinToMediaUI(itemDetails, { posterWidth: 640, backdropWidth: 1400 }) : item;
   const seasonsQ = useSeriesSeasons(effective?.kind === "Series" ? effective.id : undefined);
@@ -93,8 +98,8 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
       }
       if (e.key === "Enter" && e.target === modalRef.current) {
         if (!effective?.id) return;
-        if (effective.kind === "MusicAlbum") navigate(`/music/album/${effective.id}`);
-        else navigate(`/watch/${effective.id}`);
+        if (effective.kind === "MusicAlbum") { rememberBrowsePath(); navigate(`/music/album/${effective.id}`); }
+        else { rememberBrowsePath(); navigate(`/watch/${effective.id}`); }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -124,8 +129,8 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
   const primaryAction =
     effective.kind === "MusicAlbum"
-      ? { label: "Tracks", onClick: () => navigate(`/music/album/${effective.id}`), icon: Music2 }
-      : { label: "Play", onClick: () => navigate(`/watch/${effective.id}`), icon: Play };
+      ? { label: "Tracks", onClick: () => { rememberBrowsePath(); navigate(`/music/album/${effective.id}`); }, icon: Music2 }
+      : { label: "Play", onClick: () => { rememberBrowsePath(); navigate(`/watch/${effective.id}`); }, icon: Play };
 
   const duration = formatDuration(effective.durationMinutes);
 
@@ -331,7 +336,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                     <button
                       key={ep.Id}
                       className="focusable group w-full rounded-md border border-white/10 bg-background/40 px-3 py-2.5 text-left transition-colors hover:bg-background/60 focus-visible:border-primary/70 focus-visible:bg-background/70"
-                      onClick={() => navigate(`/watch/${ep.Id}`)}
+                      onClick={() => { rememberBrowsePath(); navigate(`/watch/${ep.Id}`); }}
                       data-episode-id={ep.Id}
                       data-tv-episode-column-item="true"
                       onFocus={(e) => {
@@ -381,7 +386,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               <h3 className="text-xl font-black text-foreground">More like this</h3>
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {related.map((r) => (
-                  <MediaCard key={r.id} item={r} onClick={() => navigate(`/watch/${r.id}`)} />
+                  <MediaCard key={r.id} item={r} onClick={() => { rememberBrowsePath(); navigate(`/watch/${r.id}`); }} />
                 ))}
               </div>
             </div>

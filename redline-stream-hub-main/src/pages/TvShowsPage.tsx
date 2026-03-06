@@ -76,9 +76,12 @@ export default function TvShowsPage() {
         <div className="mt-10">
           <h2 className="text-lg sm:text-xl font-bold text-foreground mb-4">All TV Shows</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {series.map((it) => (
-              <MediaCard key={it.id} item={it} onClick={() => setSelected(it)} showRating={sort === "rating"} fluid />
-            ))}
+            {series.map((it, idx) => {
+              const lastMediaId = typeof window !== "undefined" ? window.sessionStorage.getItem("redline:last-media-id") : null;
+              return (
+              <MediaCard key={it.id} item={it} onClick={() => setSelected(it)} showRating={sort === "rating"} fluid autofocus={lastMediaId ? lastMediaId === it.id : idx === 0} />
+            );
+            })}
           </div>
         </div>
       </div>

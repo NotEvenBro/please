@@ -121,6 +121,7 @@ function RailTile({
   const handleSelect = () => {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem("redline:last-media-id", item.id);
+      window.sessionStorage.setItem("redline:last-browse-path", `${window.location.pathname}${window.location.search}`);
     }
     onSelect?.(item);
   };
@@ -152,7 +153,7 @@ function RailTile({
         onClick={handleSelect}
         showProgress={showProgress}
         focused={focused}
-        autofocus={lastMediaId === item.id}
+        autofocus={lastMediaId ? lastMediaId === item.id : idx === 0}
       />
     </div>
   );

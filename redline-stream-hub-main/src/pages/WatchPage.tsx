@@ -146,7 +146,7 @@ export default function WatchPage() {
   const scheduleControlsHide = () => {
     clearHideControlsTimer();
     if (!isPlaying) return;
-    hideChromeTimerRef.current = window.setTimeout(() => setShowControls(false), 2800);
+    hideChromeTimerRef.current = window.setTimeout(() => setShowControls(false), 2000);
   };
 
   const showControlsNow = () => {
@@ -213,6 +213,17 @@ export default function WatchPage() {
     setShowSettingsPanel(true);
     setShowSeasonPanel(false);
     focusFirstInPanel("watch-settings");
+  };
+
+  const goBackToBrowse = () => {
+    if (typeof window !== "undefined") {
+      const target = window.sessionStorage.getItem("redline:last-browse-path");
+      if (target) {
+        navigate(target, { replace: true });
+        return;
+      }
+    }
+    navigate(-1);
   };
 
   useEffect(() => {
@@ -416,7 +427,7 @@ export default function WatchPage() {
 
       if (REMOTE_BACK_KEYS.has(e.key) || REMOTE_BACK_CODES.has(keyCode)) {
         e.preventDefault();
-        navigate(-1);
+        goBackToBrowse();
         return;
       }
 
@@ -461,6 +472,11 @@ export default function WatchPage() {
       }
 
       if (e.key === "ArrowUp") {
+        if (isSeekFocused) {
+          e.preventDefault();
+          setShowControls(false);
+          return;
+        }
         showControlsNow();
         if (active === seasonButtonRef.current) {
           e.preventDefault();
@@ -495,7 +511,7 @@ export default function WatchPage() {
       }
 
       if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && active?.dataset.watchControl === "row") {
-        const rowControls = Array.from(document.querySelectorAll<HTMLElement>("[data-watch-control='row'].focusable"));
+        const rowControls = Array.from(document.querySelectorAll<HTMLElement>("[data-watch-control='row'].focusable")).filter((el) => !(el as HTMLButtonElement).disabled);
         const idx = rowControls.indexOf(active);
         if (idx >= 0) {
           e.preventDefault();
@@ -507,7 +523,7 @@ export default function WatchPage() {
 
     shell.addEventListener("keydown", onKeyDown);
     return () => shell.removeEventListener("keydown", onKeyDown);
-  }, [navigate]);
+  }, [navigate, goBackToBrowse]);
 
   useEffect(() => {
     const t = window.setTimeout(() => playPauseButtonRef.current?.focus(), 250);
@@ -547,7 +563,7 @@ export default function WatchPage() {
               <AlertCircle className="h-5 w-5" />
               <span className="font-semibold">Couldn’t load this item.</span>
             </div>
-            <Button className="focusable" onClick={() => navigate(-1)}>
+            <Button className="focusable" onClick={goBackToBrowse}>
               Go back
             </Button>
           </div>
@@ -571,7 +587,7 @@ export default function WatchPage() {
             <Button
               variant="ghost"
               className="focusable h-12 w-12 rounded-full border border-white/25 bg-black/45 p-0 hover:bg-black/70"
-              onClick={() => navigate(-1)}
+              onClick={goBackToBrowse}
               aria-label="Back"
               data-watch-control="row"
             >
