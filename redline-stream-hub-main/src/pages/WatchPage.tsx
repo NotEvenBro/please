@@ -91,6 +91,13 @@ export default function WatchPage() {
   const hideChromeTimerRef = useRef<number | null>(null);
   const lastProgressSaveSecRef = useRef(0);
   const autoNextTriggeredRef = useRef(false);
+  const progressInFlightRef = useRef(false);
+  const lastProgressSentAtMsRef = useRef(0);
+  const lastProgressSentTicksRef = useRef(0);
+  const hlsFatalCountRef = useRef(0);
+  const hlsRecoveredNetworkRef = useRef(false);
+  const hlsRecoveredMediaRef = useRef(false);
+  const didFallbackToDirectRef = useRef(false);
 
   const { data: itemDetails, isLoading, isError } = useItem(id);
   const media = useMemo(
@@ -190,10 +197,25 @@ export default function WatchPage() {
     const v = videoRef.current;
     if (!v) return;
     const positionTicks = Math.round((v.currentTime || 0) * 10_000_000);
+
+    const now = Date.now();
+    const minGapMs = 4000;
+    const minDeltaTicks = 20_000_000; // 2s
+    if (!played) {
+      if (progressInFlightRef.current) return;
+      if (now - lastProgressSentAtMsRef.current < minGapMs) return;
+      if (Math.abs(positionTicks - lastProgressSentTicksRef.current) < minDeltaTicks) return;
+    }
+
+    progressInFlightRef.current = true;
     try {
       await savePlaybackProgress(id, positionTicks, played);
+      lastProgressSentAtMsRef.current = now;
+      lastProgressSentTicksRef.current = positionTicks;
     } catch {
       // best-effort persistence
+    } finally {
+      progressInFlightRef.current = false;
     }
   };
 
@@ -272,6 +294,13 @@ export default function WatchPage() {
   useEffect(() => {
     autoNextTriggeredRef.current = false;
     lastProgressSaveSecRef.current = 0;
+    progressInFlightRef.current = false;
+    lastProgressSentAtMsRef.current = 0;
+    lastProgressSentTicksRef.current = 0;
+    hlsFatalCountRef.current = 0;
+    hlsRecoveredNetworkRef.current = false;
+    hlsRecoveredMediaRef.current = false;
+    didFallbackToDirectRef.current = false;
     setShowControls(true);
     setCurrentTime(0);
     setDuration(0);
@@ -342,8 +371,30 @@ export default function WatchPage() {
           hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean; type?: string; details?: string }) => {
             setHlsDebug([data.type, data.details].filter(Boolean).join(" | "));
             if (data.fatal) {
-              setVideoError("Compatibility stream failed to load. Falling back to direct playback.");
-              setStreamUrl(directStreamUrl);
+              hlsFatalCountRef.current += 1;
+
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !hlsRecoveredNetworkRef.current) {
+                hlsRecoveredNetworkRef.current = true;
+                setHlsDebug("HLS network error: retrying load");
+                hls.startLoad();
+                return;
+              }
+
+              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !hlsRecoveredMediaRef.current) {
+                hlsRecoveredMediaRef.current = true;
+                setHlsDebug("HLS media error: recovering media pipeline");
+                hls.recoverMediaError();
+                return;
+              }
+
+              if (!didFallbackToDirectRef.current && streamUrl !== directStreamUrl) {
+                didFallbackToDirectRef.current = true;
+                setVideoError("Compatibility stream failed to load. Falling back to direct playback.");
+                setStreamUrl(directStreamUrl);
+                return;
+              }
+
+              setVideoError("Playback failed after multiple recovery attempts. Please restart the stream.");
             }
           });
           return;
