@@ -32,9 +32,9 @@ export default function TopNav() {
       data-tv-group="top-nav"
     >
       <div className="tv-safe flex h-full items-center gap-8">
-        <Link to="/" className="focusable flex items-center">
+        <div className="flex items-center" aria-hidden="true">
           <img src="/Website.png" alt="Redline" className="h-10 w-auto brightness-125" />
-        </Link>
+        </div>
 
         <div className="hidden items-center gap-1 sm:flex">
           {navItems.map((item) => {

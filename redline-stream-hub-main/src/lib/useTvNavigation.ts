@@ -225,9 +225,8 @@ export function useTvNavigation(enabled = true) {
         const activeGroup = getGroupKey(active);
 
         if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
-          const rect = active.getBoundingClientRect();
-          if (rect.top <= 220) {
-            focusTopNav();
+          const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));
+          if (!inWatchPage && focusTopNav()) {
             return;
           }
         }
