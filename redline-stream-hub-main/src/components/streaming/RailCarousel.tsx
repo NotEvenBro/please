@@ -9,6 +9,7 @@ import { FocusContext, useFocusable } from "@noriginmedia/norigin-spatial-naviga
 interface RailCarouselProps {
   title: string;
   titleLink?: string;
+  showViewMore?: boolean;
   items: MediaItemUI[];
   onItemSelect?: (item: MediaItemUI) => void;
   /** @deprecated */
@@ -23,6 +24,7 @@ function makeKey(input: string) {
 export default function RailCarousel({
   title,
   titleLink,
+  showViewMore = false,
   items,
   onItemSelect,
   onItemClick,
@@ -51,15 +53,7 @@ export default function RailCarousel({
   return (
     <FocusContext.Provider value={focusKey}>
       <section ref={ref as any} className="py-3" aria-label={title} data-tv-group={railKey}>
-        {titleLink ? (
-          <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">
-            <Link to={titleLink} className="focusable inline-block rounded-sm px-1 py-0.5">
-              {title}
-            </Link>
-          </h2>
-        ) : (
-          <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">{title}</h2>
-        )}
+        <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">{title}</h2>
 
         <div className="relative group/rail">
           {/* Scroll buttons (mouse/touch) */}
@@ -93,10 +87,65 @@ export default function RailCarousel({
                 scrollContainerRef={scrollRef}
               />
             ))}
+
+            {showViewMore && titleLink ? (
+              <ViewMoreTile
+                railKey={railKey}
+                idx={items.length}
+                titleLink={titleLink}
+                scrollContainerRef={scrollRef}
+              />
+            ) : null}
           </div>
         </div>
       </section>
     </FocusContext.Provider>
+  );
+}
+
+function ViewMoreTile({
+  railKey,
+  idx,
+  titleLink,
+  scrollContainerRef,
+}: {
+  railKey: string;
+  idx: number;
+  titleLink: string;
+  scrollContainerRef: React.RefObject<HTMLDivElement>;
+}) {
+  const { ref, focused } = useFocusable({
+    focusKey: `${railKey}_VIEW_MORE_${idx}`,
+    onFocus: () => {
+      const el = ref.current as HTMLElement | null;
+      const scroller = scrollContainerRef.current;
+      if (!el || !scroller) return;
+
+      const elRect = el.getBoundingClientRect();
+      const scRect = scroller.getBoundingClientRect();
+      const leftOverflow = elRect.left < scRect.left + 24;
+      const rightOverflow = elRect.right > scRect.right - 24;
+      if (leftOverflow || rightOverflow) {
+        el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    },
+  });
+
+  return (
+    <div role="listitem">
+      <Link
+        ref={ref as any}
+        to={titleLink}
+        className={[
+          "focusable group relative flex items-center justify-center overflow-hidden rounded-md border border-white/15 bg-white/5 text-white/90",
+          "transition-transform duration-200 ease-out will-change-transform",
+          focused ? "z-10 scale-110 border-white/50 shadow-[0_16px_40px_rgba(0,0,0,0.65)]" : "scale-100",
+        ].join(" ")}
+        style={{ width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
+      >
+        <span className="rounded-full border border-white/35 bg-black/30 px-5 py-2 text-sm font-semibold tracking-wide">View More</span>
+      </Link>
+    </div>
   );
 }
 
