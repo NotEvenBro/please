@@ -28,11 +28,12 @@ export default function Layout({ children }: LayoutProps) {
     if (!isTvMode) return;
     const t = window.setTimeout(() => {
       const active = document.activeElement as HTMLElement | null;
-      if (active?.classList.contains("focusable")) return;
+      if (active?.classList.contains("focusable") && active.isConnected) return;
 
       const target =
         document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
-        document.querySelector<HTMLElement>("main .focusable");
+        document.querySelector<HTMLElement>("main .focusable") ||
+        document.querySelector<HTMLElement>("[data-tv-group='top-nav'] .focusable");
       target?.focus();
     }, 80);
 

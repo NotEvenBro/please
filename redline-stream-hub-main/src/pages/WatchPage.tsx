@@ -146,6 +146,7 @@ export default function WatchPage() {
   const scheduleControlsHide = () => {
     clearHideControlsTimer();
     if (!isPlaying) return;
+    if (showSeasonPanel || showSettingsPanel) return;
     hideChromeTimerRef.current = window.setTimeout(() => setShowControls(false), 2000);
   };
 
@@ -214,6 +215,28 @@ export default function WatchPage() {
     setShowSeasonPanel(false);
     focusFirstInPanel("watch-settings");
   };
+
+  useEffect(() => {
+    if (!showSeasonPanel) return;
+    setShowControls(true);
+    clearHideControlsTimer();
+    focusFirstInPanel("watch-season-panel");
+  }, [showSeasonPanel]);
+
+  useEffect(() => {
+    if (!showSettingsPanel) return;
+    setShowControls(true);
+    clearHideControlsTimer();
+    focusFirstInPanel("watch-settings");
+  }, [showSettingsPanel]);
+
+  useEffect(() => {
+    if (showSeasonPanel || showSettingsPanel) {
+      clearHideControlsTimer();
+      return;
+    }
+    scheduleControlsHide();
+  }, [showSeasonPanel, showSettingsPanel]);
 
   const goBackToBrowse = () => {
     if (typeof window !== "undefined") {
@@ -663,14 +686,11 @@ export default function WatchPage() {
                   className="focusable text-white hover:bg-white/20"
                   data-watch-control="row"
                   onClick={() => {
-                    setShowSeasonPanel((x) => {
-                      const next = !x;
-                      if (next) {
-                        setShowSettingsPanel(false);
-                        focusFirstInPanel("watch-season-panel");
-                      }
-                      return next;
-                    });
+                    if (showSeasonPanel) {
+                      setShowSeasonPanel(false);
+                      return;
+                    }
+                    openSeasonPanel();
                   }}
                   onMouseEnter={() => {
                     setShowSeasonPanel(true);
@@ -686,14 +706,11 @@ export default function WatchPage() {
                   className="focusable text-white hover:bg-white/20"
                   data-watch-control="row"
                   onClick={() => {
-                    setShowSettingsPanel((x) => {
-                      const next = !x;
-                      if (next) {
-                        setShowSeasonPanel(false);
-                        focusFirstInPanel("watch-settings");
-                      }
-                      return next;
-                    });
+                    if (showSettingsPanel) {
+                      setShowSettingsPanel(false);
+                      return;
+                    }
+                    openSettingsPanel();
                   }}
                 >
                   <Settings className="h-5 w-5" />
