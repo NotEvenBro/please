@@ -192,7 +192,8 @@ export function useTvNavigation(enabled = true) {
       const rawKey = normalizeKey(e.key, e.code, e.keyCode);
       const scope = getScope();
       const items = getFocusableItems(scope);
-      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const rawActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const active = rawActive && rawActive.isConnected ? rawActive : null;
       const key = active ? normalizeDirectionalKeyForLayout(rawKey, active) : rawKey;
 
       if (key === "Back") {

@@ -280,6 +280,18 @@ export default function WatchPage() {
   }, [directStreamUrl, transcodeStreamUrl]);
 
   useEffect(() => {
+    if (!videoError) return;
+    const t = window.setTimeout(() => setVideoError(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [videoError]);
+
+  useEffect(() => {
+    if (!hlsDebug) return;
+    const t = window.setTimeout(() => setHlsDebug(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [hlsDebug]);
+
+  useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.volume = Math.min(1, Math.max(0, volume));
