@@ -2,18 +2,27 @@ import { useEffect } from "react";
 
 type Dir = "left" | "right" | "up" | "down";
 
-function normalizeKey(key: string) {
+function normalizeKey(key: string, code?: string, keyCode?: number) {
+  if (code === "NumpadEnter" || keyCode === 13 || keyCode === 23 || keyCode === 66) return "Enter";
+  if (keyCode === 37) return "ArrowLeft";
+  if (keyCode === 38) return "ArrowUp";
+  if (keyCode === 39) return "ArrowRight";
+  if (keyCode === 40) return "ArrowDown";
+  if (keyCode === 8 || keyCode === 166 || keyCode === 461 || keyCode === 10009) return "Back";
+
   return key === "Left"
     ? "ArrowLeft"
     : key === "Right"
-      ? "ArrowRight"
-      : key === "Up"
-        ? "ArrowUp"
-        : key === "Down"
-          ? "ArrowDown"
-          : key === "OK" || key === "Select"
-            ? "Enter"
-            : key;
+    ? "ArrowRight"
+    : key === "Up"
+    ? "ArrowUp"
+    : key === "Down"
+    ? "ArrowDown"
+    : key === "OK" || key === "Select" || key === "Center"
+    ? "Enter"
+    : key === "GoBack" || key === "BrowserBack" || key === "Back" || key === "Escape" || key === "XF86Back" || key === "HistoryBack"
+    ? "Back"
+    : key;
 }
 
 function isFocusable(el: Element): el is HTMLElement {
@@ -49,6 +58,10 @@ function focusTopNav() {
   firstNav.focus();
   firstNav.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   return true;
+}
+
+function getFirstFocusableInGroup(group: string) {
+  return document.querySelector<HTMLElement>(`[data-tv-group="${group}"] .focusable`);
 }
 
 function isNearTopOfPage() {
@@ -90,38 +103,40 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
 
   for (const el of items) {
     if (el === current) continue;
-
     const r = el.getBoundingClientRect();
     const p = center(r);
     const dx = p.x - c.x;
     const dy = p.y - c.y;
 
+    let ok = false;
     let primary = 0;
     let secondary = 0;
-    let directionalOk = false;
 
     if (dir === "left" && dx < -8) {
-      directionalOk = true;
+      ok = true;
       primary = Math.abs(dx);
       secondary = Math.abs(dy);
     } else if (dir === "right" && dx > 8) {
-      directionalOk = true;
+      ok = true;
       primary = Math.abs(dx);
       secondary = Math.abs(dy);
     } else if (dir === "up" && dy < -8) {
-      directionalOk = true;
+      ok = true;
       primary = Math.abs(dy);
       secondary = Math.abs(dx);
     } else if (dir === "down" && dy > 8) {
-      directionalOk = true;
+      ok = true;
       primary = Math.abs(dy);
       secondary = Math.abs(dx);
     }
 
-    if (!directionalOk) continue;
+    if (!ok) continue;
 
-    const groupPenalty = getGroupKey(el) === currentGroup ? 0 : dir === "left" || dir === "right" ? 250 : 25;
+    // Keep focus movement local for smoother TV UX.
+    const sameGroup = getGroupKey(el) === currentGroup;
+    const groupPenalty = sameGroup ? 0 : (dir === "left" || dir === "right" ? 1200 : 90);
     const score = primary * 10 + secondary + groupPenalty;
+
     candidates.push({ el, score });
   }
 
@@ -129,19 +144,12 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
   return candidates[0]?.el ?? null;
 }
 
-function isTypingContext(active: HTMLElement | null): boolean {
-  if (!active) return false;
-  const tag = active.tagName.toLowerCase();
-  if (tag === "input" || tag === "textarea" || tag === "select") return true;
-  return active.isContentEditable;
+function isTextInputElement(el: HTMLElement) {
+  const tag = el.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
-function normalizeDirectionalKeyForLayout(key: string, active: HTMLElement) {
-  const inEpisodeColumn = Boolean(active.closest("[data-tv-episode-column='true']"));
-  if (!inEpisodeColumn) return key;
-
-  if (key === "ArrowRight") return "ArrowDown";
-  if (key === "ArrowLeft") return "ArrowUp";
+function normalizeDirectionalKeyForLayout(key: string, _active: HTMLElement) {
   return key;
 }
 
@@ -182,16 +190,28 @@ export function useTvNavigation(enabled = true) {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;
 
-      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      const rawKey = normalizeKey(e.key);
-
-      if (isTypingContext(active) && rawKey !== "Escape") return;
-
+      const rawKey = normalizeKey(e.key, e.code, e.keyCode);
       const scope = getScope();
       const items = getFocusableItems(scope);
+      const rawActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const active = rawActive && rawActive.isConnected ? rawActive : null;
+      const key = active ? normalizeDirectionalKeyForLayout(rawKey, active) : rawKey;
+
+      if (key === "Back") {
+        if (active && isTextInputElement(active)) return;
+        // Prefer moving to top nav before leaving page for TV remotes.
+        if (!active || getGroupKey(active) !== "top-nav") {
+          e.preventDefault();
+          focusTopNav();
+          return;
+        }
+        e.preventDefault();
+        window.history.back();
+        return;
+      }
 
       if (!active || !active.classList.contains("focusable")) {
-        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(rawKey)) {
+        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(key)) {
           const first = getAutoFocusTarget(scope, items);
           if (!first) return;
           e.preventDefault();
@@ -216,17 +236,89 @@ export function useTvNavigation(enabled = true) {
 
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
         e.preventDefault();
-        const dir: Dir =
-          key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
-        const next = pickNext(active, dir, items);
+        const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
+        const activeGroup = getGroupKey(active);
+
+        if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
+          const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));
+          if (!inWatchPage && focusTopNav()) {
+            return;
+          }
+        }
+
+        // Keep horizontal focus locked within top nav so it doesn't spill into content.
+        const activeRail = active.closest(".rail-scroll");
+        const directionalPool =
+          activeGroup === "top-nav" && (dir === "left" || dir === "right")
+            ? getTopNavItems(items)
+            : activeRail && (dir === "left" || dir === "right")
+            ? items.filter((it) => it.closest(".rail-scroll") === activeRail)
+            : (dir === "left" || dir === "right")
+            ? items.filter((it) => getGroupKey(it) === activeGroup)
+            : items.filter((it) => getGroupKey(it) !== "top-nav");
+
+        if (dir === "down" && getGroupKey(active) === "watch-controls") {
+          const episodeTarget = getFirstFocusableInGroup("watch-episodes") || getFirstFocusableInGroup("watch-episode-row");
+          if (episodeTarget) {
+            episodeTarget.focus();
+            ensureVisible(episodeTarget);
+            return;
+          }
+        }
+
+        if (dir === "down" && getGroupKey(active) === "details-actions") {
+          const episodeTarget =
+            document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-episode-column-item='true'].focusable") ||
+            getFirstFocusableInGroup("details-episodes");
+          if (episodeTarget) {
+            episodeTarget.focus();
+            ensureVisible(episodeTarget);
+            return;
+          }
+        }
+
+        if (dir === "right" && active.closest("[data-tv-episode-column='true']")) {
+          const seasonTrigger = document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-season-trigger='true'].focusable");
+          if (seasonTrigger) {
+            seasonTrigger.focus();
+            ensureVisible(seasonTrigger);
+            return;
+          }
+        }
+
+        if (dir === "left" && active.dataset.tvSeasonTrigger === "true") {
+          const episodeTarget = document.querySelector<HTMLElement>("[data-tv-group='details-episodes'] [data-tv-episode-column-item='true'].focusable");
+          if (episodeTarget) {
+            episodeTarget.focus();
+            ensureVisible(episodeTarget);
+            return;
+          }
+        }
+
+        const next = pickNext(active, dir, directionalPool);
         if (next) {
           next.focus();
           ensureVisible(next);
+        } else if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
+          // Wrap within top nav for seamless left/right remote movement.
+          const edge = pickTopNavEdge(directionalPool, dir === "left" ? "last" : "first");
+          if (edge) {
+            edge.focus();
+            ensureVisible(edge);
+          }
         }
         return;
       }
 
       if (key === "Enter" || key === " ") {
+        const episodeBtn = getEpisodeButton(active);
+        if (episodeBtn) {
+          e.preventDefault();
+          episodeBtn.click();
+          return;
+        }
+
+        if (isTextInputElement(active)) return;
         e.preventDefault();
         const episodeButton = getEpisodeButton(active);
         if (episodeButton) {
