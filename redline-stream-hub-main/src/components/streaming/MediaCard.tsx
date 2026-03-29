@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { Play, Music2, Star } from "lucide-react";
+import { Play, Star } from "lucide-react";
 import type { MediaItemUI } from "@/types/media";
 
 interface MediaCardProps {
@@ -8,10 +8,12 @@ interface MediaCardProps {
   showProgress?: boolean;
   showRating?: boolean;
   focused?: boolean;
+  autofocus?: boolean;
+  fluid?: boolean;
 }
 
 const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
-  ({ item, onClick, showProgress, showRating, focused }, ref) => {
+  ({ item, onClick, showProgress, showRating, focused, autofocus, fluid }, ref) => {
     const subtitle =
       item.kind === "Track"
         ? item.artist ?? item.album
@@ -21,12 +23,8 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         ? String(item.year)
         : undefined;
 
-    const isMusic = item.kind === "Track" || item.kind === "MusicAlbum" || item.kind === "Artist";
-
     const starValue = item.rating == null ? null : Math.round((item.rating / 10) * 5 * 2) / 2;
     const userStars = item.userStars;
-
-    const hasPoster = Boolean(item.posterUrl);
 
     return (
       <button
@@ -37,27 +35,42 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
           "transition-transform duration-150",
           focused ? "ring-4 ring-primary/70 scale-[1.03]" : "ring-0",
         ].join(" ")}
-        style={{ width: "clamp(140px, 18vw, 220px)", aspectRatio: "2/3" }}
+        style={fluid ? { width: "100%", aspectRatio: "16/9" } : { width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
         onClick={() => onClick?.(item)}
         aria-label={subtitle ? `${item.title} — ${subtitle}` : item.title}
+        data-tv-autofocus={autofocus ? "true" : undefined}
       >
+        <img
+          src={item.backdropUrl ?? item.posterUrl ?? ""}
+          alt={item.title}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-85" />
+
+        <div className="absolute left-0 right-0 bottom-0 p-3">
+          <div className="text-sm font-semibold leading-tight text-white line-clamp-1">{item.title}</div>
+          {subtitle ? <div className="mt-0.5 text-xs text-white/75 line-clamp-1">{subtitle}</div> : null}
+        </div>
+
+        {showRating && starValue != null ? (
+          <div className="absolute left-2 top-2 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-xs text-white">
+            <Star className="h-3 w-3" />
+            <span>{starValue.toFixed(1)}</span>
+          </div>
+        ) : null}
+
         {userStars ? (
-          <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-background/70 backdrop-blur text-xs font-semibold">
+          <div className="absolute right-2 top-2 rounded bg-primary/90 px-2 py-1 text-xs font-bold text-primary-foreground">
             {"★".repeat(userStars)}
           </div>
         ) : null}
 
-        {/* Poster / fallback */}
-        {hasPoster ? (
-          <img
-            src={item.posterUrl!}
-            alt={item.title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
+        {showProgress && typeof item.progress === "number" ? (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+            <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }} />
+          </div>
         ) : null}
 
         {/* Fallback background layer (always present) */}

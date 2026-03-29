@@ -117,7 +117,7 @@
 @layer components {
   /* Rail/Carousel scroll container */
   .rail-scroll {
-    @apply flex gap-3 overflow-x-auto scroll-smooth;
+    @apply flex gap-2 overflow-x-auto scroll-smooth;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     -ms-overflow-style: none;

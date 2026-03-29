@@ -46,6 +46,19 @@ export function useRecentEpisodes(limit = 20) {
   });
 }
 
+
+export function useContinueWatching(limit = 24) {
+  return useQuery<JellyfinItem[]>({
+    queryKey: ["jellyfin", "continue-watching", limit],
+    queryFn: async () => {
+      const data = await fetchJson<JellyfinItemsResponse>(`/api/jellyfin/continue-watching?limit=${limit}`);
+      return data?.Items ?? [];
+    },
+    retry: 1,
+    staleTime: 15_000,
+  });
+}
+
 export function useMovies(startIndex: number, limit: number, search: string) {
   return useQuery<JellyfinItemsResponse>({
     queryKey: ["jellyfin", "movies", startIndex, limit, search],
@@ -140,6 +153,29 @@ export async function rateItem(id: string, rating: number): Promise<void> {
   }
 }
 
+export async function clearItemRating(id: string): Promise<void> {
+  const res = await fetch(`/api/jellyfin/rate/${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating: null }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Clear rating failed: ${res.status} ${txt}`);
+  }
+}
+
+export async function savePlaybackProgress(id: string, positionTicks: number, played: boolean): Promise<void> {
+  const res = await fetch(`/api/jellyfin/progress/${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ positionTicks: Math.max(0, Math.round(positionTicks)), played }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Progress save failed: ${res.status} ${txt}`);
+  }
+}
 
 export function useSeasonEpisodes(seasonId?: string) {
   return useQuery({

@@ -4,11 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MediaCard from "./MediaCard";
 import type { MediaItemUI } from "@/types/media";
-import { useRecentMovies, useSeries, useItem, useSeriesSeasons, useSeasonEpisodes } from "@/hooks/use-jellyfin";
+import { useRecentMovies, useSeries, useItem, useSeriesSeasons, useSeasonEpisodes, rateItem, clearItemRating } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { setLocalStars, useRatingsVersion } from "@/lib/localRating";
 
 interface DetailsModalProps {
   item: MediaItemUI | null;
@@ -46,7 +45,6 @@ function formatDuration(minutes?: number) {
 }
 
 export default function DetailsModal({ item, onClose }: DetailsModalProps) {
-  const _ratingsVersion = useRatingsVersion();
   const qc = useQueryClient();
   const [ratingDraft, setRatingDraft] = useState<number>(0);
   const [ratingSaving, setRatingSaving] = useState(false);
@@ -57,6 +55,11 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
+
+  const rememberBrowsePath = () => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("redline:last-browse-path", `${window.location.pathname}${window.location.search}`);
+  };
 
   const { data: itemDetails } = useItem(item?.id);
   const effective = itemDetails ? jellyfinToMediaUI(itemDetails, { posterWidth: 640, backdropWidth: 1400 }) : item;
@@ -79,7 +82,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
   useEffect(() => {
     if (!effective) return;
-    setRatingDraft(effective.userStars ?? 0);
+    setRatingDraft(typeof effective.rating === "number" ? Math.round(effective.rating / 2) : 0);
     setRatingError(null);
     setRatingOpen(false);
   }, [effective?.id]);
@@ -95,8 +98,8 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
       }
       if (e.key === "Enter" && e.target === modalRef.current) {
         if (!effective?.id) return;
-        if (effective.kind === "MusicAlbum") navigate(`/music/album/${effective.id}`);
-        else navigate(`/watch/${effective.id}`);
+        if (effective.kind === "MusicAlbum") { rememberBrowsePath(); navigate(`/music/album/${effective.id}`); }
+        else { rememberBrowsePath(); navigate(`/watch/${effective.id}`); }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -126,8 +129,8 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
   const primaryAction =
     effective.kind === "MusicAlbum"
-      ? { label: "Tracks", onClick: () => navigate(`/music/album/${effective.id}`), icon: Music2 }
-      : { label: "Play", onClick: () => navigate(`/watch/${effective.id}`), icon: Play };
+      ? { label: "Tracks", onClick: () => { rememberBrowsePath(); navigate(`/music/album/${effective.id}`); }, icon: Music2 }
+      : { label: "Play", onClick: () => { rememberBrowsePath(); navigate(`/watch/${effective.id}`); }, icon: Play };
 
   const duration = formatDuration(effective.durationMinutes);
 
@@ -239,8 +242,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                                 setRatingSaving(true);
                                 setRatingError(null);
                                 setRatingDraft(v);
-                                setLocalStars(effective.id, v);
-                                // just to refresh any cached lists so UI updates immediately
+                                await rateItem(effective.id, v * 2);
                                 await qc.invalidateQueries({ queryKey: ["jellyfin"] });
                               } catch (e: any) {
                                 setRatingError(e?.message ?? "Failed to save rating");
@@ -264,7 +266,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                               setRatingSaving(true);
                               setRatingError(null);
                               setRatingDraft(0);
-                              setLocalStars(effective.id, null);
+                              await clearItemRating(effective.id);
                               await qc.invalidateQueries({ queryKey: ["jellyfin"] });
                             } catch (e: any) {
                               setRatingError(e?.message ?? "Failed to clear rating");
@@ -280,7 +282,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
                     {ratingError && <div className="text-sm text-destructive">{ratingError}</div>}
                     <div className="text-xs text-muted-foreground">
-                      Ratings are saved locally on this device.
+                      Ratings are synced through Jellyfin for your account.
                     </div>
                   </div>
                   </div>
@@ -299,10 +301,16 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
           {effective.kind === "Series" && (
             <div className="space-y-3" data-tv-group="details-episodes">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-black text-foreground">Episodes</h3>
+                <div>
+                  <h3 className="text-2xl font-black tracking-tight text-foreground">Episodes</h3>
+                  <p className="text-xs text-muted-foreground">Choose an episode and press Enter/OK to play</p>
+                </div>
                 <div className="w-44">
                   <Select value={selectedSeasonId ?? undefined} onValueChange={(v) => setSelectedSeasonId(v)}>
-                    <SelectTrigger className="focusable">
+                    <SelectTrigger
+                      className="focusable border-primary/40 bg-background/70 text-foreground"
+                      data-tv-season-trigger="true"
+                    >
                       <SelectValue placeholder="Season" />
                     </SelectTrigger>
                     <SelectContent>
@@ -319,7 +327,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1" data-tv-episode-column="true">
                 {episodes.map((ep) => {
                   const ui = jellyfinToMediaUI(ep, { posterWidth: 420, backdropWidth: 900 });
-                  const epNum = ep.IndexNumber != null ? ep.IndexNumber : undefined;
+                  const epNum = ep.IndexNumber != null ? ep.IndexNumber : index + 1;
                   const dur = ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 10_000_000 / 60) : undefined;
                   return (
                     <button
@@ -348,23 +356,37 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                       }}
                       aria-label={`Play ${ui.title}`}
                     >
-                      <div className="w-36 flex-none rounded overflow-hidden bg-muted" style={{ aspectRatio: "16/9" }}>
-                        <img src={ui.backdropUrl ?? ui.posterUrl ?? ""} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <div className="font-bold text-foreground truncate">
-                            {epNum != null ? `E${epNum}: ` : ""}{ui.title}
-                          </div>
-                          {dur != null && <div className="text-xs text-muted-foreground">{dur}m</div>}
+                      <div className="grid grid-cols-[2rem_8.75rem_1fr_auto] items-center gap-3 md:grid-cols-[2.5rem_10rem_1fr_auto]">
+                        <div className="text-center text-xl font-bold text-muted-foreground/90">{epNum}</div>
+
+                        <div className="overflow-hidden rounded bg-muted" style={{ aspectRatio: "16/9" }}>
+                          <img
+                            src={ui.backdropUrl ?? ui.posterUrl ?? ""}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
                         </div>
-                        {ui.description && <div className="text-sm text-muted-foreground line-clamp-2 mt-1">{ui.description}</div>}
+
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-bold text-foreground">
+                            {ep.IndexNumber != null ? `E${ep.IndexNumber}: ` : ""}
+                            {ui.title}
+                          </div>
+                          {ui.description ? (
+                            <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{ui.description}</div>
+                          ) : null}
+                        </div>
+
+                        <div className="pl-2 text-sm font-semibold text-muted-foreground">{dur != null ? `${dur}m` : "—"}</div>
                       </div>
                     </button>
                   );
                 })}
                 {episodes.length === 0 && (
-                  <div className="text-sm text-muted-foreground">No episodes found for this season.</div>
+                  <div className="rounded-md border border-dashed border-white/15 bg-background/30 px-4 py-6 text-sm text-muted-foreground">
+                    No episodes found for this season.
+                  </div>
                 )}
               </div>
             </div>
@@ -376,7 +398,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               <h3 className="text-xl font-black text-foreground">More like this</h3>
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {related.map((r) => (
-                  <MediaCard key={r.id} item={r} onClick={() => navigate(`/watch/${r.id}`)} />
+                  <MediaCard key={r.id} item={r} onClick={() => { rememberBrowsePath(); navigate(`/watch/${r.id}`); }} />
                 ))}
               </div>
             </div>

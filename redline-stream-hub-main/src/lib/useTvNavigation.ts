@@ -35,7 +35,28 @@ function isFocusable(el: Element): el is HTMLElement {
   if (style.visibility === "hidden" || style.display === "none") return false;
 
   const rect = el.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
+  return rect.width > 0 && rect.height > 0;
+}
+
+function center(rect: DOMRect) {
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function getScope(): ParentNode {
+  const openModal = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']")).at(-1);
+  if (openModal) return openModal;
+  return document.querySelector("main") ?? document.body;
+}
+
+function selectOpen() {
+  return Boolean(document.querySelector("[data-tv-select-content][data-state='open']"));
+}
+
+function focusTopNav() {
+  const firstNav = document.querySelector<HTMLElement>("[data-tv-group='top-nav'] .focusable");
+  if (!firstNav) return false;
+  firstNav.focus();
+  firstNav.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   return true;
 }
 
@@ -78,7 +99,33 @@ function getGroupKey(el: HTMLElement): string {
   return "default";
 }
 
-function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLElement | null {
+function getGroupKey(el: HTMLElement): string {
+  const group = el.closest<HTMLElement>("[data-tv-group]");
+  if (group?.dataset.tvGroup) return group.dataset.tvGroup;
+
+  const rail = el.closest<HTMLElement>(".rail-scroll");
+  if (rail) return "rail-scroll";
+
+  return "default";
+}
+
+function getEpisodeButton(el: HTMLElement | null): HTMLButtonElement | null {
+  if (!el) return null;
+  if (el instanceof HTMLButtonElement && el.dataset.episodeId) return el;
+  return el.closest("button[data-episode-id]");
+}
+
+function getTopNavItems(items: HTMLElement[]) {
+  return items.filter((x) => getGroupKey(x) === "top-nav");
+}
+
+function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  return edge === "first" ? sorted[0] : sorted[sorted.length - 1];
+}
+
+function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
   const cRect = current.getBoundingClientRect();
   const c = center(cRect);
   const currentGroup = getGroupKey(current);

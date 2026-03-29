@@ -1,7 +1,6 @@
 import type { JellyfinItem } from "@/types";
 import type { MediaItemUI, MediaKind } from "@/types/media";
 import { jellyfinImageUrl } from "@/hooks/use-jellyfin";
-import { getLocalStars } from "@/lib/localRating";
 
 function inferKind(item: JellyfinItem): MediaKind {
   const t = (item.Type || "").toLowerCase();
@@ -54,7 +53,7 @@ export function jellyfinToMediaUI(
     description: item.Overview,
     kind,
     rating: item.UserData?.Rating,
-    userStars: item.Id ? getLocalStars(item.Id) : undefined,
+    userStars: typeof item.UserData?.Rating === "number" ? Math.round(item.UserData.Rating / 2) : undefined,
     posterUrl,
     backdropUrl,
 
@@ -70,5 +69,6 @@ export function jellyfinToMediaUI(
     album: item.Album,
     artist,
     durationMinutes: ticksToMinutes(item.RunTimeTicks),
+    progress: typeof item.UserData?.PlayedPercentage === "number" ? Math.max(0, Math.min(100, item.UserData.PlayedPercentage)) : undefined,
   };
 }

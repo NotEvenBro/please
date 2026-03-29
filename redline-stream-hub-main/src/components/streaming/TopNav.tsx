@@ -4,9 +4,9 @@ import { Search, Home, Film, Tv, Settings, Music2 } from "lucide-react";
 
 const navItems = [
   { label: "Home", path: "/", icon: Home },
-  { label: "Search", path: "/search", icon: Search },
+  { label: "Shows", path: "/tv", icon: Tv },
   { label: "Movies", path: "/movies", icon: Film },
-  { label: "TV Shows", path: "/tv", icon: Tv },
+  { label: "Search", path: "/search", icon: Search },
   { label: "Music", path: "/music", icon: Music2 },
   { label: "Settings", path: "/settings", icon: Settings },
 ];
@@ -23,36 +23,28 @@ export default function TopNav() {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        scrolled
-          ? "bg-background/95 backdrop-blur-md border-b border-border"
-          : "bg-gradient-to-b from-background/80 to-transparent"
+      className={`fixed left-0 right-0 top-0 z-50 transition-colors duration-300 ${
+        scrolled ? "bg-black/95 backdrop-blur-md" : "bg-gradient-to-b from-black/90 to-transparent"
       }`}
       style={{ height: "var(--nav-height)" }}
       role="navigation"
       aria-label="Main navigation"
       data-tv-group="top-nav"
     >
-      <div className="flex items-center h-full tv-safe">
-        <Link to="/" className="focusable mr-6 sm:mr-10 flex items-center gap-3">
-          <img
-            src="/Website.png"
-            alt="Redline"
-            className="h-12 sm:h-14 w-auto brightness-125 drop-shadow-[0_0_14px_rgba(255,0,0,0.55)]"
-          />
-        </Link>
+      <div className="tv-safe flex h-full items-center gap-8">
+        <div className="flex items-center" aria-hidden="true">
+          <img src="/Website.png" alt="Redline" className="h-10 w-auto brightness-125" />
+        </div>
 
-        <div className="hidden sm:flex items-center gap-1">
+        <div className="hidden items-center gap-1 sm:flex">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`focusable flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  active
-                    ? "text-foreground bg-accent"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                className={`focusable rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  active ? "text-white" : "text-white/70 hover:text-white"
                 }`}
                 aria-current={active ? "page" : undefined}
               >
@@ -63,16 +55,14 @@ export default function TopNav() {
           })}
         </div>
 
-        <div className="flex sm:hidden items-center gap-1 ml-auto">
-          {navItems.slice(0, 5).map((item) => {
+        <div className="ml-auto flex items-center gap-1 sm:hidden">
+          {navItems.slice(0, 4).map((item) => {
             const active = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`focusable p-3 rounded-md transition-colors ${
-                  active ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`focusable rounded-md p-2.5 ${active ? "text-white" : "text-white/70"}`}
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
               >

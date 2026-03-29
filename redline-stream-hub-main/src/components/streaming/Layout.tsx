@@ -19,6 +19,22 @@ export default function Layout({ children }: LayoutProps) {
     });
   }, []);
 
+  useEffect(() => {
+    if (!isTvMode) return;
+    const t = window.setTimeout(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active?.classList.contains("focusable") && active.isConnected) return;
+
+      const target =
+        document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
+        document.querySelector<HTMLElement>("main .focusable") ||
+        document.querySelector<HTMLElement>("[data-tv-group='top-nav'] .focusable");
+      target?.focus();
+    }, 80);
+
+    return () => window.clearTimeout(t);
+  }, [isTvMode, location.pathname, location.search]);
+
   return (
     <div className="min-h-screen bg-background" data-control-mode={mode}>
       <TopNav />
