@@ -465,7 +465,14 @@ app.get('/api/jellyfin/transcode/:fileName', (req, res) => {
           .map((line) => {
             const trimmed = line.trim();
             if (!trimmed || trimmed.startsWith('#')) return line;
-            if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) return line;
+            if (/^https?:\/\//i.test(trimmed)) {
+              const absolute = new URL(trimmed);
+              const absPath = `${absolute.pathname}${absolute.search}`;
+              return `/api/jellyfin/transcode-abs?path=${encodeURIComponent(absPath)}`;
+            }
+            if (trimmed.startsWith('/')) {
+              return `/api/jellyfin/transcode-abs?path=${encodeURIComponent(trimmed)}`;
+            }
             const q = new URLSearchParams();
             if (playSessionId) q.set('playSessionId', playSessionId);
             if (mediaSourceId) q.set('mediaSourceId', mediaSourceId);
@@ -492,6 +499,73 @@ app.get('/api/jellyfin/transcode/:fileName', (req, res) => {
   proxyReq.on('error', (err) => {
     console.error('[Transcode Proxy Error]', err.message);
     res.status(502).json({ error: 'Transcode artifact unreachable', details: err.message });
+  });
+
+  proxyReq.end();
+});
+
+app.get('/api/jellyfin/transcode-abs', (req, res) => {
+  const rawPath = String(req.query.path || '');
+  if (!rawPath || !rawPath.startsWith('/')) {
+    return res.status(400).json({ error: 'Invalid transcode path' });
+  }
+
+  const url = new URL(rawPath, config.jellyfinBaseUrl);
+  const mod = url.protocol === 'https:' ? https : http;
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+    headers: {
+      'X-Emby-Token': config.jellyfinApiKey,
+      'Accept': '*/*',
+    },
+  };
+
+  const proxyReq = mod.request(options, (proxyRes) => {
+    const contentType = String(proxyRes.headers['content-type'] || '').toLowerCase();
+    if (contentType.includes('mpegurl') || url.pathname.endsWith('.m3u8')) {
+      let body = '';
+      proxyRes.on('data', (chunk) => (body += chunk));
+      proxyRes.on('end', () => {
+        const rewritten = body
+          .split('\n')
+          .map((line) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return line;
+            if (/^https?:\/\//i.test(trimmed)) {
+              const absolute = new URL(trimmed);
+              return `/api/jellyfin/transcode-abs?path=${encodeURIComponent(`${absolute.pathname}${absolute.search}`)}`;
+            }
+            if (trimmed.startsWith('/')) {
+              return `/api/jellyfin/transcode-abs?path=${encodeURIComponent(trimmed)}`;
+            }
+            const baseDir = url.pathname.replace(/[^/]*$/, '');
+            const rel = `${baseDir}${trimmed}`;
+            return `/api/jellyfin/transcode-abs?path=${encodeURIComponent(rel)}`;
+          })
+          .join('\n');
+
+        res.status(proxyRes.statusCode || 200);
+        res.setHeader('content-type', proxyRes.headers['content-type'] || 'application/vnd.apple.mpegurl');
+        res.setHeader('cache-control', 'no-store');
+        res.send(rewritten);
+      });
+      return;
+    }
+
+    res.status(proxyRes.statusCode || 200);
+    const passthroughHeaders = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'etag', 'last-modified', 'cache-control'];
+    for (const h of passthroughHeaders) {
+      if (proxyRes.headers[h]) res.setHeader(h, proxyRes.headers[h]);
+    }
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error('[Transcode Abs Proxy Error]', err.message);
+    res.status(502).json({ error: 'Absolute transcode artifact unreachable', details: err.message });
   });
 
   proxyReq.end();
