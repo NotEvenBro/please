@@ -343,6 +343,9 @@ function enforceTranscodeCaps(transcodingUrl, req) {
   u.searchParams.set('MaxWidth', '1920');
   u.searchParams.set('MaxHeight', '1080');
   u.searchParams.set('RequireAvc', 'true');
+  u.searchParams.set('EnableHardwareEncoding', 'false');
+  u.searchParams.set('EnableHardwareDecoding', 'false');
+  u.searchParams.set('EnableAudioVbrEncoding', 'false');
   u.searchParams.delete('AudioStreamIndex');
   u.searchParams.delete('hevc-level');
   u.searchParams.delete('hevc-videobitdepth');
