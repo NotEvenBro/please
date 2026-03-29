@@ -31,9 +31,9 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         ref={ref}
         type="button"
         className={[
-          "focusable group relative overflow-hidden rounded-md border border-white/10 bg-card/80",
-          "transition-transform duration-200 ease-out will-change-transform",
-          focused ? "z-10 scale-110 border-white/50 shadow-[0_16px_40px_rgba(0,0,0,0.65)]" : "scale-100",
+          "focusable group relative rounded-2xl overflow-hidden bg-card shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+          "transition-transform duration-150",
+          focused ? "ring-4 ring-primary/70 scale-[1.03]" : "ring-0",
         ].join(" ")}
         style={fluid ? { width: "100%", aspectRatio: "16/9" } : { width: "clamp(220px, 24vw, 330px)", aspectRatio: "16/9" }}
         onClick={() => onClick?.(item)}
@@ -73,9 +73,32 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
           </div>
         ) : null}
 
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black">
-            <Play className="h-6 w-6 fill-current" />
+        {/* Fallback background layer (always present) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-muted/30 to-muted/80" />
+
+        {/* Title strip so card never looks empty */}
+        <div className="absolute left-0 right-0 bottom-0 p-2.5 bg-gradient-to-t from-black/92 via-black/75 to-black/20 backdrop-blur-[1px]">
+          <div className="text-[0.95rem] font-semibold tracking-tight leading-tight text-white line-clamp-2">{item.title}</div>
+          {subtitle ? <div className="text-xs text-white/75 line-clamp-1 mt-0.5">{subtitle}</div> : null}
+
+          {showRating && starValue != null ? (
+            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Star className="w-3 h-3" />
+              <span>{starValue.toFixed(1)} / 5</span>
+            </div>
+          ) : null}
+
+          {showProgress && typeof item.progress === "number" ? (
+            <div className="mt-2 h-1 w-full bg-muted rounded">
+              <div className="h-1 bg-primary rounded" style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }} />
+            </div>
+          ) : null}
+        </div>
+
+        {/* Hover overlay play */}
+        <div className="absolute inset-0 bg-background/55 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
+            {isMusic ? <Music2 className="w-6 h-6 text-primary-foreground" /> : <Play className="w-6 h-6 text-primary-foreground" />}
           </div>
         </div>
       </button>

@@ -48,6 +48,7 @@ export default function TopNav() {
                 }`}
                 aria-current={active ? "page" : undefined}
               >
+                <item.icon className="w-5 h-5 shrink-0 stroke-[2.25] drop-shadow-[0_0_2px_rgba(255,255,255,0.25)]" />
                 {item.label}
               </Link>
             );
@@ -65,7 +66,7 @@ export default function TopNav() {
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
               >
-                <item.icon className="h-5 w-5" />
+                <item.icon className="w-6 h-6 shrink-0 stroke-[2.4] drop-shadow-[0_0_2px_rgba(255,255,255,0.28)]" />
               </Link>
             );
           })}

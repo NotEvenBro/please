@@ -299,7 +299,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
 
           
           {effective.kind === "Series" && (
-            <div className="space-y-4" data-tv-group="details-episodes">
+            <div className="space-y-3" data-tv-group="details-episodes">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-2xl font-black tracking-tight text-foreground">Episodes</h3>
@@ -324,21 +324,33 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                 </div>
               </div>
 
-              <div
-                className="max-h-[44vh] space-y-2 overflow-y-auto pr-1"
-                data-tv-episode-column="true"
-              >
-                {episodes.map((ep, index) => {
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1" data-tv-episode-column="true">
+                {episodes.map((ep) => {
                   const ui = jellyfinToMediaUI(ep, { posterWidth: 420, backdropWidth: 900 });
                   const epNum = ep.IndexNumber != null ? ep.IndexNumber : index + 1;
                   const dur = ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 10_000_000 / 60) : undefined;
                   return (
                     <button
                       key={ep.Id}
-                      className="focusable group w-full rounded-md border border-white/10 bg-background/40 px-3 py-2.5 text-left transition-colors hover:bg-background/60 focus-visible:border-primary/70 focus-visible:bg-background/70"
-                      onClick={() => { rememberBrowsePath(); navigate(`/watch/${ep.Id}`); }}
+                      className="w-full text-left focusable rounded-md bg-background/30 hover:bg-background/40 transition-colors p-3 flex gap-3 items-center"
+                      onClick={() => navigate(`/watch/${ep.Id}`)}
                       data-episode-id={ep.Id}
                       data-tv-episode-column-item="true"
+                      onKeyDown={(e) => {
+                        const key = e.key;
+                        if (key === "Enter" || key === " " || key === "Select" || key === "OK") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
+                      onKeyUp={(e) => {
+                        if (e.code === "NumpadEnter") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/watch/${ep.Id}`);
+                        }
+                      }}
                       onFocus={(e) => {
                         e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
                       }}

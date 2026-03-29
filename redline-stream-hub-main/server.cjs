@@ -250,44 +250,6 @@ function applySubtitlePreferenceToTranscodeUrl(transcodingUrl, subtitlePref) {
   return `${u.pathname}${u.search}`;
 }
 
-
-function mediaSourceNeedsStrictCompat(mediaSource) {
-  if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
-  const streams = mediaSource.MediaStreams;
-  const video = streams.find((st) => String(st?.Type || '').toLowerCase() === 'video');
-  const audio = streams.find((st) => String(st?.Type || '').toLowerCase() === 'audio');
-
-  const vCodec = String(video?.Codec || '').toLowerCase();
-  const aCodec = String(audio?.Codec || '').toLowerCase();
-  const bitDepth = Number(video?.BitDepth || 8);
-  const range = String(video?.VideoRangeType || video?.VideoRange || '').toLowerCase();
-
-  const hardVideo = ['hevc', 'h265', 'x265', 'av1'].includes(vCodec);
-  const hardAudio = ['eac3', 'truehd', 'dts', 'dca', 'dtshd_ma', 'ac3'].includes(aCodec);
-  const hdrOr10Bit = bitDepth > 8 || range.includes('hdr');
-
-  return hardVideo || hardAudio || hdrOr10Bit;
-}
-
-function applyStrictCompatibilityToTranscodeUrl(transcodingUrl, req, mediaSource) {
-  if (!transcodingUrl) return transcodingUrl;
-  const { isTv, isVidaa } = getPlaybackClientHints(req);
-  if (!isTv && !mediaSourceNeedsStrictCompat(mediaSource)) return transcodingUrl;
-
-  const u = new URL(transcodingUrl, config.jellyfinBaseUrl);
-  const targetBitrate = isVidaa ? '8000000' : '12000000';
-  u.searchParams.set('VideoCodec', 'h264');
-  u.searchParams.set('AudioCodec', 'aac');
-  u.searchParams.set('allowAudioStreamCopy', 'false');
-  u.searchParams.set('allowVideoStreamCopy', 'false');
-  u.searchParams.set('VideoBitrate', targetBitrate);
-  u.searchParams.set('h264-videobitdepth', '8');
-  u.searchParams.set('h264-profile', 'high');
-  u.searchParams.set('h264-level', '41');
-  u.searchParams.set('SubtitleMethod', 'Encode');
-  return `${u.pathname}${u.search}`;
-}
-
 function resolveTranscodeArtifactPath(fileName, playSessionId, mediaSourceId) {
   const bySession = playSessionId ? transcodeSessionBasePath.get(`session:${playSessionId}`) : null;
   const bySource = mediaSourceId ? transcodeSessionBasePath.get(`source:${mediaSourceId}`) : null;
@@ -788,81 +750,12 @@ async function fetchFirstEpisodeIdForSeries(seriesId) {
 }
 
 // Direct stream (same-origin) + Range support
-app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
-  const requestedId = decodeURIComponent((req.params?.[0] || '').toString());
-  const normalizedMediaSourceId = (req.query.mediaSourceId || req.query.MediaSourceId || '').toString();
-  const normalizedPlaySessionId = (req.query.playSessionId || req.query.PlaySessionId || '').toString();
-  console.log('[Stream]', requestedId, 'mediaSourceId', normalizedMediaSourceId || '-', 'playSessionId', normalizedPlaySessionId || '-', 'kind', req.query.kind || '-', 'url', req.originalUrl);
-  const kind = (req.query.kind || '').toString().toLowerCase();
-  const isAudio = kind === 'track' || kind === 'audio';
-
-  let targetRequestedId = requestedId;
-  if (!isAudio && kind === 'series') {
-    const firstEpisodeId = await fetchFirstEpisodeIdForSeries(requestedId);
-    if (firstEpisodeId) {
-      console.log('[Stream] Resolved series id to first episode', requestedId, '=>', firstEpisodeId);
-      targetRequestedId = firstEpisodeId;
-    } else {
-      return res.status(404).json({
-        error: 'Series has no playable episodes',
-        details: `Could not resolve a first episode for series ${requestedId}`,
-      });
-    }
-  }
-
-  const id = encodeURIComponent(targetRequestedId);
-  const mediaSourceId = normalizedMediaSourceId;
-  const playSessionId = normalizedPlaySessionId; // optional
+app.get('/api/jellyfin/stream/:id', async (req, res) => {
+  console.log('[Stream]', req.params.id, 'mediaSourceId', req.query.mediaSourceId, 'playSessionId', req.query.playSessionId, 'kind', req.query.kind);
+  const id = encodeURIComponent(req.params.id);
+  const mediaSourceId = (req.query.mediaSourceId || '').toString();
+  const playSessionId = (req.query.playSessionId || '').toString(); // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
-  const subtitlePref = String(req.query.subtitle || '').toLowerCase();
-
-  const isTranscodeArtifact = /\.(m3u8|ts|vtt|m4s|mp4)$/i.test(requestedId);
-  if (isTranscodeArtifact) {
-    const playSession = (req.query.PlaySessionId || req.query.playSessionId || '').toString();
-    const sourceId = (req.query.MediaSourceId || req.query.mediaSourceId || '').toString();
-    const targetPath = resolveTranscodeArtifactPath(requestedId, playSession, sourceId);
-    if (!targetPath) {
-      return res.status(502).json({ error: 'Transcode session context missing', details: 'No base path found for transcode artifact request' });
-    }
-
-    const passthrough = new URLSearchParams();
-    for (const [k, v] of Object.entries(req.query)) {
-      if (v == null) continue;
-      if (k === 'kind' || k === 'preferTranscode') continue;
-      if (Array.isArray(v)) {
-        for (const each of v) passthrough.append(k, String(each));
-      } else {
-        passthrough.set(k, String(v));
-      }
-    }
-
-    const withQs = passthrough.toString();
-    const artifactUrl = withQs ? `${targetPath}?${withQs}` : targetPath;
-    console.log('[Stream Artifact]', requestedId, '=>', artifactUrl);
-    return proxyJellyfinStream(artifactUrl, req, res);
-  }
-
-  const shouldTranscodeForCompatibility = (mediaSource) => {
-    if (!mediaSource || !Array.isArray(mediaSource.MediaStreams)) return false;
-
-    // Common codecs typically supported by TV browsers/Chromium builds.
-    const supportedAudioCodecs = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
-    const unsupportedVideoCodecs = new Set(['hevc', 'h265', 'x265', 'av1']);
-
-    const audioStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'audio');
-    const hasUnsupportedAudio = audioStreams.some((s) => {
-      const codec = String(s?.Codec || '').toLowerCase();
-      return codec && !supportedAudioCodecs.has(codec);
-    });
-
-    const videoStreams = mediaSource.MediaStreams.filter((s) => String(s?.Type || '').toLowerCase() === 'video');
-    const hasUnsupportedVideo = videoStreams.some((s) => {
-      const codec = String(s?.Codec || '').toLowerCase();
-      return codec && unsupportedVideoCodecs.has(codec);
-    });
-
-    return hasUnsupportedAudio || hasUnsupportedVideo;
-  };
   if (!mediaSourceId) {
     // Fallback: fetch PlaybackInfo to discover MediaSourceId
     try {
@@ -926,13 +819,11 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
       const kind = (req.query.kind || '').toString().toLowerCase();
       const isAudio = kind === 'track' || kind === 'audio';
 
-      if ((preferTranscode || shouldTranscodeForCompatibility(source)) && !isAudio) {
-        const transcodingUrl = source.TranscodingUrl;
+      if (preferTranscode && !isAudio) {
+        const transcodingUrl = info.json.MediaSources[0].TranscodingUrl;
         if (transcodingUrl) {
-          const effectiveTranscodingUrl = applyStrictCompatibilityToTranscodeUrl(applySubtitlePreferenceToTranscodeUrl(transcodingUrl, subtitlePref), req, source);
-          console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
-          rememberTranscodePath(effectiveTranscodingUrl, discoveredSession, source.Id);
-          return proxyJellyfinStream(effectiveTranscodingUrl, req, res);
+          console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
+          return proxyJellyfinStream(transcodingUrl, req, res);
         }
       }
 
@@ -999,13 +890,63 @@ app.get(/^\/api\/jellyfin\/stream\/(.+)$/, async (req, res) => {
         info.MediaSources[0] &&
         (info.MediaSources[0].TranscodingUrl && (preferTranscode || shouldTranscodeForCompatibility(info.MediaSources[0])))
       ) {
-        const effectiveTranscodingUrl = applyStrictCompatibilityToTranscodeUrl(applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref), req, info.MediaSources[0]);
+        const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref);
         console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
         rememberTranscodePath(effectiveTranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
         return proxyJellyfinStream(effectiveTranscodingUrl, req, res);
       }
     } catch (e) {
       console.error('[Stream] compatibility fallback failed', e?.message || e);
+    }
+  }
+
+  if (preferTranscode && !isAudio) {
+    try {
+      const qs =
+        `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
+        `&IsPlayback=true&AutoOpenLiveStream=true`;
+
+      const body = JSON.stringify({});
+      const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
+      const mod = url.protocol === 'https:' ? https : http;
+      const headers = {
+        'X-Emby-Token': config.jellyfinApiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      };
+
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers,
+      };
+
+      const info = await new Promise((resolve, reject) => {
+        const r = mod.request(options, (pr) => {
+          let data = '';
+          pr.on('data', (c) => (data += c));
+          pr.on('end', () => {
+            try {
+              resolve(data ? JSON.parse(data) : null);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        r.on('error', reject);
+        r.write(body);
+        r.end();
+      });
+
+      if (info && info.MediaSources && info.MediaSources[0] && info.MediaSources[0].TranscodingUrl) {
+        console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
+        return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
+      }
+    } catch (e) {
+      console.error('[Stream] preferTranscode fallback failed', e?.message || e);
     }
   }
 

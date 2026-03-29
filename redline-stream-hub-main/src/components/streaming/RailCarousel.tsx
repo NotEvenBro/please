@@ -52,8 +52,16 @@ export default function RailCarousel({
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <section ref={ref as any} className="py-3" aria-label={title} data-tv-group={railKey}>
-        <h2 className="text-2xl font-bold text-foreground/95 mb-3 tv-safe tracking-tight">{title}</h2>
+      <section ref={ref as any} className="py-4" aria-label={title} data-tv-group={railKey}>
+        {titleLink ? (
+          <h2 className="text-lg sm:text-xl font-bold text-foreground mb-3 tv-safe">
+            <Link to={titleLink} className="inline-block rounded-sm">
+              {title}
+            </Link>
+          </h2>
+        ) : (
+          <h2 className="text-lg sm:text-xl font-bold text-foreground mb-3 tv-safe">{title}</h2>
+        )}
 
         <div className="relative group/rail">
           {/* Scroll buttons (mouse/touch) */}
