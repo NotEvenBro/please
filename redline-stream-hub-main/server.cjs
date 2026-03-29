@@ -276,7 +276,7 @@ function buildPlaybackInfoRequestBody(req) {
   const { isTv, isVidaa } = getPlaybackClientHints(req);
 
   // Keep TV streams conservative to reduce segment/network pressure on 10-foot devices.
-  const maxStreamingBitrate = isVidaa ? 8_000_000 : isTv ? 18_000_000 : 120_000_000;
+  const maxStreamingBitrate = isVidaa ? 6_000_000 : isTv ? 12_000_000 : 120_000_000;
   const videoProfile = {
     Container: 'ts',
     Type: 'Video',
@@ -310,6 +310,53 @@ function buildPlaybackInfoRequestBody(req) {
     AllowVideoStreamCopy: true,
     AllowAudioStreamCopy: false,
   });
+}
+
+function shouldTranscodeForCompatibility(mediaSource = {}) {
+  const container = String(mediaSource?.Container || '').toLowerCase();
+  const streams = Array.isArray(mediaSource?.MediaStreams) ? mediaSource.MediaStreams : [];
+
+  const video = streams.find((s) => String(s?.Type || '').toLowerCase() === 'video');
+  const audio = streams.find((s) => String(s?.Type || '').toLowerCase() === 'audio');
+
+  const videoCodec = String(video?.Codec || '').toLowerCase();
+  const audioCodec = String(audio?.Codec || '').toLowerCase();
+  const bitrate = Number(mediaSource?.Bitrate || 0);
+  const width = Number(video?.Width || 0);
+  const height = Number(video?.Height || 0);
+  const bitDepth = Number(video?.BitDepth || 0);
+  const hdrHints = [
+    video?.VideoRange,
+    video?.VideoRangeType,
+    video?.ColorTransfer,
+    video?.ColorPrimaries,
+    video?.Title,
+    video?.DisplayTitle,
+    video?.Profile,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  const isHdrLike = Boolean(video?.IsHdr) || /hdr|hlg|pq|bt2020|smpte2084/.test(hdrHints) || bitDepth > 8;
+  const is4kLike = width >= 3800 || height >= 2100;
+
+  // Keep browser/TV playback conservative: AVC video + broadly-supported audio.
+  const browserSafeVideo = new Set(['h264', 'avc', 'avc1']);
+  const browserSafeAudio = new Set(['aac', 'mp3', 'mp2', 'opus', 'vorbis']);
+
+  const containerLikelyDirectPlayable = ['mp4', 'm4v', 'webm'].includes(container);
+  const videoNeedsTranscode = videoCodec && !browserSafeVideo.has(videoCodec);
+  const audioNeedsTranscode = audioCodec && !browserSafeAudio.has(audioCodec);
+  const veryHighBitrate = bitrate > 40_000_000;
+
+  return Boolean(
+    videoNeedsTranscode ||
+    audioNeedsTranscode ||
+    !containerLikelyDirectPlayable ||
+    veryHighBitrate ||
+    isHdrLike ||
+    is4kLike
+  );
 }
 
 // --- Jellyfin stream proxy helper (GET + Range support) ---
@@ -756,6 +803,9 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
   const mediaSourceId = (req.query.mediaSourceId || '').toString();
   const playSessionId = (req.query.playSessionId || '').toString(); // optional
   const preferTranscode = String(req.query.preferTranscode || '') === '1';
+  const kind = (req.query.kind || '').toString().toLowerCase();
+  const isAudio = kind === 'track' || kind === 'audio';
+  const subtitlePref = String(req.query.subtitle || '').toLowerCase();
   if (!mediaSourceId) {
     // Fallback: fetch PlaybackInfo to discover MediaSourceId
     try {
@@ -815,14 +865,11 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
       const discoveredSession = info.json.PlaySessionId || '';
       console.log('[Stream] Discovered mediaSourceId via PlaybackInfo', discovered);
 
-      // Continue with discovered IDs
-      const kind = (req.query.kind || '').toString().toLowerCase();
-      const isAudio = kind === 'track' || kind === 'audio';
-
-      if (preferTranscode && !isAudio) {
-        const transcodingUrl = info.json.MediaSources[0].TranscodingUrl;
+      if ((preferTranscode || shouldTranscodeForCompatibility(source)) && !isAudio) {
+        const transcodingUrl = applySubtitlePreferenceToTranscodeUrl(info.json.MediaSources[0].TranscodingUrl, subtitlePref);
         if (transcodingUrl) {
           console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
+          rememberTranscodePath(transcodingUrl, discoveredSession, discovered);
           return proxyJellyfinStream(transcodingUrl, req, res);
         }
       }
@@ -906,7 +953,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         `UserId=${encodeURIComponent(config.jellyfinUserId)}` +
         `&IsPlayback=true&AutoOpenLiveStream=true`;
 
-      const body = JSON.stringify({});
+      const body = buildPlaybackInfoRequestBody(req);
       const url = new URL(`/Items/${id}/PlaybackInfo?${qs}`, config.jellyfinBaseUrl);
       const mod = url.protocol === 'https:' ? https : http;
       const headers = {
@@ -942,8 +989,10 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
       });
 
       if (info && info.MediaSources && info.MediaSources[0] && info.MediaSources[0].TranscodingUrl) {
-        console.log('[Stream] Using transcoding url for compatibility', info.MediaSources[0].TranscodingUrl);
-        return proxyJellyfinStream(info.MediaSources[0].TranscodingUrl, req, res);
+        const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref);
+        console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
+        rememberTranscodePath(effectiveTranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
+        return proxyJellyfinStream(effectiveTranscodingUrl, req, res);
       }
     } catch (e) {
       console.error('[Stream] preferTranscode fallback failed', e?.message || e);
