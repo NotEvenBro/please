@@ -94,7 +94,7 @@ function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
   return edge === "first" ? sorted[0] : sorted[sorted.length - 1];
 }
 
-function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]) {
+function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLElement | null {
   const cRect = current.getBoundingClientRect();
   const c = center(cRect);
   const currentGroup = getGroupKey(current);
@@ -168,14 +168,14 @@ function getAutoFocusTarget(scope: ParentNode, items: HTMLElement[]) {
   return items[0] ?? null;
 }
 
-
 function getFocusableItems(scope: ParentNode) {
   const scopedItems = Array.from(scope.querySelectorAll(".focusable"));
 
-  // When navigating page content (non-modal), include top-nav items as part of the
-  // candidate pool so left/right in top bar can move across links.
   const topNav = document.querySelector("[data-tv-group='top-nav']");
-  const includeTopNav = topNav && scope !== topNav && !(scope instanceof HTMLElement && scope.getAttribute("role") === "dialog");
+  const includeTopNav =
+    topNav &&
+    scope !== topNav &&
+    !(scope instanceof HTMLElement && scope.getAttribute("role") === "dialog");
   const topNavItems = includeTopNav ? Array.from(topNav.querySelectorAll(".focusable")) : [];
 
   return Array.from(new Set([...scopedItems, ...topNavItems])).filter(isFocusable);
@@ -193,6 +193,7 @@ function ensureVisible(el: HTMLElement) {
 export function useTvNavigation(enabled = true) {
   useEffect(() => {
     if (!enabled) return;
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;
@@ -226,6 +227,19 @@ export function useTvNavigation(enabled = true) {
           ensureVisible(first);
         }
         return;
+      }
+
+      const key = normalizeDirectionalKeyForLayout(rawKey, active);
+
+      if (key === "ArrowUp" && isNearTopOfPage() && getGroupKey(active) !== "top-nav") {
+        const topNavItems = getTopNavItems(items);
+        const target = pickTopNavEdge(topNavItems, "first");
+        if (target) {
+          e.preventDefault();
+          target.focus();
+          ensureVisible(target);
+          return;
+        }
       }
 
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
@@ -314,7 +328,18 @@ export function useTvNavigation(enabled = true) {
 
         if (isTextInputElement(active)) return;
         e.preventDefault();
+        const episodeButton = getEpisodeButton(active);
+        if (episodeButton) {
+          episodeButton.click();
+          return;
+        }
         active.click();
+      }
+
+      if (key === "Home") {
+        if (focusTopNav()) {
+          e.preventDefault();
+        }
       }
     };
 
