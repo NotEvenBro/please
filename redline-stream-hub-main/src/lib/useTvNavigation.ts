@@ -203,9 +203,9 @@ export function useTvNavigation(enabled = true) {
       const items = getFocusableItems(scope);
       const rawActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const active = rawActive && rawActive.isConnected ? rawActive : null;
-      const key = active ? normalizeDirectionalKeyForLayout(rawKey, active) : rawKey;
+      const navKey = active ? normalizeDirectionalKeyForLayout(rawKey, active) : rawKey;
 
-      if (key === "Back") {
+      if (navKey === "Back") {
         if (active && isTextInputElement(active)) return;
         // Prefer moving to top nav before leaving page for TV remotes.
         if (!active || getGroupKey(active) !== "top-nav") {
@@ -219,7 +219,7 @@ export function useTvNavigation(enabled = true) {
       }
 
       if (!active || !active.classList.contains("focusable")) {
-        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(key)) {
+        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(navKey)) {
           const first = getAutoFocusTarget(scope, items);
           if (!first) return;
           e.preventDefault();
@@ -229,22 +229,9 @@ export function useTvNavigation(enabled = true) {
         return;
       }
 
-      const key = normalizeDirectionalKeyForLayout(rawKey, active);
-
-      if (key === "ArrowUp" && isNearTopOfPage() && getGroupKey(active) !== "top-nav") {
-        const topNavItems = getTopNavItems(items);
-        const target = pickTopNavEdge(topNavItems, "first");
-        if (target) {
-          e.preventDefault();
-          target.focus();
-          ensureVisible(target);
-          return;
-        }
-      }
-
-      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(navKey)) {
         e.preventDefault();
-        const dir: Dir = key === "ArrowLeft" ? "left" : key === "ArrowRight" ? "right" : key === "ArrowUp" ? "up" : "down";
+        const dir: Dir = navKey === "ArrowLeft" ? "left" : navKey === "ArrowRight" ? "right" : navKey === "ArrowUp" ? "up" : "down";
         const activeGroup = getGroupKey(active);
 
         if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
@@ -318,7 +305,7 @@ export function useTvNavigation(enabled = true) {
         return;
       }
 
-      if (key === "Enter" || key === " ") {
+      if (navKey === "Enter" || navKey === " ") {
         const episodeBtn = getEpisodeButton(active);
         if (episodeBtn) {
           e.preventDefault();
