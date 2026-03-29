@@ -325,7 +325,7 @@ function buildPlaybackInfoRequestBody(req) {
 function enforceTranscodeCaps(transcodingUrl, req) {
   if (!transcodingUrl) return transcodingUrl;
   const { isTv, isVidaa } = getPlaybackClientHints(req);
-  const videoCap = isVidaa ? 6_000_000 : isTv ? 12_000_000 : 20_000_000;
+  const videoCap = isVidaa ? 5_000_000 : isTv ? 8_000_000 : 10_000_000;
   const audioCap = isVidaa ? 160_000 : 192_000;
 
   const u = new URL(transcodingUrl, config.jellyfinBaseUrl);
@@ -340,6 +340,10 @@ function enforceTranscodeCaps(transcodingUrl, req) {
   u.searchParams.set('VideoBitrate', String(finalVideo));
   u.searchParams.set('AudioBitrate', String(finalAudio));
   u.searchParams.set('MaxStreamingBitrate', String(finalMax));
+  u.searchParams.set('MaxWidth', '1920');
+  u.searchParams.set('MaxHeight', '1080');
+  u.searchParams.set('RequireAvc', 'true');
+  u.searchParams.delete('AudioStreamIndex');
   u.searchParams.delete('hevc-level');
   u.searchParams.delete('hevc-videobitdepth');
   u.searchParams.delete('hevc-profile');
