@@ -150,6 +150,14 @@ function isTextInputElement(el: HTMLElement) {
 }
 
 function normalizeDirectionalKeyForLayout(key: string, _active: HTMLElement) {
+  const active = _active;
+  const inEpisodeColumn = Boolean(active.closest("[data-tv-episode-column='true']"));
+  if (!inEpisodeColumn) return key;
+
+  // Some episode layouts are visually columns but navigated like rows on TV remotes.
+  // Map horizontal keys to vertical movement so Left/Right still feels natural.
+  if (key === "ArrowRight") return "ArrowDown";
+  if (key === "ArrowLeft") return "ArrowUp";
   return key;
 }
 
