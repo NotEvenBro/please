@@ -430,7 +430,7 @@ function proxyJellyfinStream(jellyfinPath, req, res) {
   proxyReq.end();
 }
 
-function proxyTranscodingUrlViaServer(transcodingUrl, res) {
+function proxyTranscodingUrlViaServer(transcodingUrl, req, res) {
   if (!transcodingUrl) return res.status(500).json({ error: 'Missing transcodingUrl' });
   const target = new URL(transcodingUrl, config.jellyfinBaseUrl);
   const mod = target.protocol === 'https:' ? https : http;
@@ -444,6 +444,7 @@ function proxyTranscodingUrlViaServer(transcodingUrl, res) {
       'Accept': '*/*',
     },
   };
+  if (req?.headers?.range) options.headers.Range = req.headers.range;
 
   const proxyReq = mod.request(options, (proxyRes) => {
     const contentType = String(proxyRes.headers['content-type'] || '').toLowerCase();
@@ -515,6 +516,7 @@ app.get('/api/jellyfin/transcode/:fileName', (req, res) => {
       'Accept': '*/*',
     },
   };
+  if (req.headers.range) options.headers.Range = req.headers.range;
 
   const proxyReq = mod.request(options, (proxyRes) => {
     const contentType = String(proxyRes.headers['content-type'] || '').toLowerCase();
@@ -584,6 +586,7 @@ app.get('/api/jellyfin/transcode-abs', (req, res) => {
       'Accept': '*/*',
     },
   };
+  if (req.headers.range) options.headers.Range = req.headers.range;
 
   const proxyReq = mod.request(options, (proxyRes) => {
     const contentType = String(proxyRes.headers['content-type'] || '').toLowerCase();
@@ -1083,7 +1086,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         if (transcodingUrl) {
           console.log('[Stream] Using transcoding url for compatibility', transcodingUrl);
           rememberTranscodePath(transcodingUrl, discoveredSession, discovered);
-          return proxyTranscodingUrlViaServer(transcodingUrl, res);
+          return proxyTranscodingUrlViaServer(transcodingUrl, req, res);
         }
       }
 
@@ -1153,7 +1156,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref);
         console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
         rememberTranscodePath(effectiveTranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
-        return proxyTranscodingUrlViaServer(effectiveTranscodingUrl, res);
+        return proxyTranscodingUrlViaServer(effectiveTranscodingUrl, req, res);
       }
     } catch (e) {
       console.error('[Stream] compatibility fallback failed', e?.message || e);
@@ -1205,7 +1208,7 @@ app.get('/api/jellyfin/stream/:id', async (req, res) => {
         const effectiveTranscodingUrl = applySubtitlePreferenceToTranscodeUrl(info.MediaSources[0].TranscodingUrl, subtitlePref);
         console.log('[Stream] Using transcoding url for compatibility', effectiveTranscodingUrl);
         rememberTranscodePath(effectiveTranscodingUrl, info.PlaySessionId || playSessionId, info.MediaSources[0].Id || mediaSourceId);
-        return proxyTranscodingUrlViaServer(effectiveTranscodingUrl, res);
+        return proxyTranscodingUrlViaServer(effectiveTranscodingUrl, req, res);
       }
     } catch (e) {
       console.error('[Stream] preferTranscode fallback failed', e?.message || e);
