@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { Play, Star } from "lucide-react";
+import { Music2, Play, Star } from "lucide-react";
 import type { MediaItemUI } from "@/types/media";
 
 interface MediaCardProps {
@@ -22,6 +22,7 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         : item.year
         ? String(item.year)
         : undefined;
+    const isMusic = item.kind === "Track" || item.kind === "MusicAlbum";
 
     const starValue = item.rating == null ? null : Math.round((item.rating / 10) * 5 * 2) / 2;
     const userStars = item.userStars;
