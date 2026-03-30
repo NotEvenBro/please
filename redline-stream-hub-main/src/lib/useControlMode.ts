@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { mapRemoteAction } from "@/lib/remoteActions";
 
 export type ControlMode = "tv" | "pc";
 
@@ -8,13 +9,25 @@ function isLikelyTvUa() {
   return /smart-tv|smarttv|tizen|webos|appletv|hbbtv|aft|googletv|bravia|viera|roku|crkey|tv|vidda_edge/.test(ua);
 }
 
+function shouldStartInTvMode() {
+  if (isLikelyTvUa()) return true;
+  if (typeof window === "undefined") return false;
+  const forced = window.sessionStorage.getItem("redline:force-tv-mode");
+  if (forced === "1") {
+    window.sessionStorage.removeItem("redline:force-tv-mode");
+    return true;
+  }
+  return false;
+}
+
 export function useControlMode() {
-  const [mode, setMode] = useState<ControlMode>(() => (isLikelyTvUa() ? "tv" : "pc"));
+  const [mode, setMode] = useState<ControlMode>(() => (shouldStartInTvMode() ? "tv" : "pc"));
 
   useEffect(() => {
     const onPointer = () => setMode("pc");
     const onKey = (e: KeyboardEvent) => {
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(e.key)) {
+      const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });
+      if (action) {
         setMode("tv");
       }
     };
