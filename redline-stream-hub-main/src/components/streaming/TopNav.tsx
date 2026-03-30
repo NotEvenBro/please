@@ -47,6 +47,7 @@ export default function TopNav() {
                   active ? "text-white" : "text-white/70 hover:text-white"
                 }`}
                 aria-current={active ? "page" : undefined}
+                data-focus-id={`nav:${item.path}`}
               >
                 <item.icon className="w-5 h-5 shrink-0 stroke-[2.25] drop-shadow-[0_0_2px_rgba(255,255,255,0.25)]" />
                 {item.label}
@@ -65,6 +66,7 @@ export default function TopNav() {
                 className={`focusable rounded-md p-2.5 ${active ? "text-white" : "text-white/70"}`}
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
+                data-focus-id={`nav:${item.path}`}
               >
                 <item.icon className="w-6 h-6 shrink-0 stroke-[2.4] drop-shadow-[0_0_2px_rgba(255,255,255,0.28)]" />
               </Link>
