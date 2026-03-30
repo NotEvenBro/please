@@ -1,29 +1,7 @@
 import { useEffect } from "react";
+import { mapRemoteAction } from "@/lib/remoteActions";
 
 type Dir = "left" | "right" | "up" | "down";
-
-function normalizeKey(key: string, code?: string, keyCode?: number) {
-  if (code === "NumpadEnter" || keyCode === 13 || keyCode === 23 || keyCode === 66) return "Enter";
-  if (keyCode === 37) return "ArrowLeft";
-  if (keyCode === 38) return "ArrowUp";
-  if (keyCode === 39) return "ArrowRight";
-  if (keyCode === 40) return "ArrowDown";
-  if (keyCode === 8 || keyCode === 166 || keyCode === 461 || keyCode === 10009) return "Back";
-
-  return key === "Left"
-    ? "ArrowLeft"
-    : key === "Right"
-    ? "ArrowRight"
-    : key === "Up"
-    ? "ArrowUp"
-    : key === "Down"
-    ? "ArrowDown"
-    : key === "OK" || key === "Select" || key === "Center"
-    ? "Enter"
-    : key === "GoBack" || key === "BrowserBack" || key === "Back" || key === "Escape" || key === "XF86Back" || key === "HistoryBack"
-    ? "Back"
-    : key;
-}
 
 function isFocusable(el: Element): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false;
@@ -88,6 +66,24 @@ function getTopNavItems(items: HTMLElement[]) {
   return items.filter((x) => getGroupKey(x) === "top-nav");
 }
 
+function getMainContentTarget() {
+  return (
+    document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
+    document.querySelector<HTMLElement>("main .focusable")
+  );
+}
+
+function getSortTriggerForGroup(group: string) {
+  return document.querySelector<HTMLElement>(`[data-tv-sort-trigger='true'][data-tv-sort-target='${group}'].focusable`);
+}
+
+function getPreferredInGroup(group: string) {
+  return (
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] [data-tv-autofocus='true'].focusable`) ||
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] .focusable`)
+  );
+}
+
 function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
   if (!items.length) return null;
   const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
@@ -132,9 +128,8 @@ function pickNext(current: HTMLElement, dir: Dir, items: HTMLElement[]): HTMLEle
 
     if (!ok) continue;
 
-    // Keep focus movement local for smoother TV UX.
     const sameGroup = getGroupKey(el) === currentGroup;
-    const groupPenalty = sameGroup ? 0 : (dir === "left" || dir === "right" ? 1200 : 90);
+    const groupPenalty = sameGroup ? 0 : dir === "left" || dir === "right" ? 1200 : 90;
     const score = primary * 10 + secondary + groupPenalty;
 
     candidates.push({ el, score });
@@ -149,16 +144,13 @@ function isTextInputElement(el: HTMLElement) {
   return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
-function normalizeDirectionalKeyForLayout(key: string, _active: HTMLElement) {
-  const active = _active;
+function normalizeDirectionalActionForLayout(action: "LEFT" | "RIGHT" | "UP" | "DOWN", active: HTMLElement) {
   const inEpisodeColumn = Boolean(active.closest("[data-tv-episode-column='true']"));
-  if (!inEpisodeColumn) return key;
+  if (!inEpisodeColumn) return action;
 
-  // Some episode layouts are visually columns but navigated like rows on TV remotes.
-  // Map horizontal keys to vertical movement so Left/Right still feels natural.
-  if (key === "ArrowRight") return "ArrowDown";
-  if (key === "ArrowLeft") return "ArrowUp";
-  return key;
+  if (action === "RIGHT") return "DOWN";
+  if (action === "LEFT") return "UP";
+  return action;
 }
 
 function getAutoFocusTarget(scope: ParentNode, items: HTMLElement[]) {
@@ -195,31 +187,40 @@ export function useTvNavigation(enabled = true) {
     if (!enabled) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;
 
-      const rawKey = normalizeKey(e.key, e.code, e.keyCode);
+      const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });
+      if (!action) return;
+
       const scope = getScope();
       const items = getFocusableItems(scope);
       const rawActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const active = rawActive && rawActive.isConnected ? rawActive : null;
-      const navKey = active ? normalizeDirectionalKeyForLayout(rawKey, active) : rawKey;
 
-      if (navKey === "Back") {
+      if (action === "BACK") {
         if (active && isTextInputElement(active)) return;
-        // Prefer moving to top nav before leaving page for TV remotes.
+
+        if (document.querySelector("[role='dialog'][aria-modal='true']")) {
+          e.preventDefault();
+          const closeBtn = document.querySelector<HTMLElement>("[role='dialog'] .focusable[aria-label='Close']");
+          closeBtn?.click();
+          return;
+        }
+
         if (!active || getGroupKey(active) !== "top-nav") {
           e.preventDefault();
           focusTopNav();
           return;
         }
+
         e.preventDefault();
         window.history.back();
         return;
       }
 
       if (!active || !active.classList.contains("focusable")) {
-        if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter"].includes(navKey)) {
+        if (["DOWN", "UP", "LEFT", "RIGHT", "SELECT"].includes(action)) {
           const first = getAutoFocusTarget(scope, items);
           if (!first) return;
           e.preventDefault();
@@ -229,10 +230,54 @@ export function useTvNavigation(enabled = true) {
         return;
       }
 
-      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(navKey)) {
+      if (["LEFT", "RIGHT", "UP", "DOWN"].includes(action)) {
         e.preventDefault();
-        const dir: Dir = navKey === "ArrowLeft" ? "left" : navKey === "ArrowRight" ? "right" : navKey === "ArrowUp" ? "up" : "down";
+
+        const navAction = normalizeDirectionalActionForLayout(action as "LEFT" | "RIGHT" | "UP" | "DOWN", active);
+        const dir: Dir = navAction === "LEFT" ? "left" : navAction === "RIGHT" ? "right" : navAction === "UP" ? "up" : "down";
+
         const activeGroup = getGroupKey(active);
+
+        if (activeGroup === "top-nav" && dir === "down") {
+          const mainTarget = getMainContentTarget();
+          if (mainTarget) {
+            mainTarget.focus();
+            ensureVisible(mainTarget);
+          }
+          return;
+        }
+
+        if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
+          const navItems = getTopNavItems(items).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          const idx = navItems.indexOf(active);
+          if (idx >= 0 && navItems.length > 0) {
+            const nextIdx = dir === "left" ? (idx - 1 + navItems.length) % navItems.length : (idx + 1) % navItems.length;
+            const nextNav = navItems[nextIdx];
+            if (nextNav) {
+              nextNav.focus();
+              ensureVisible(nextNav);
+              return;
+            }
+          }
+        }
+
+        if (dir === "right" && (activeGroup === "movies-grid" || activeGroup === "shows-grid")) {
+          const sortTrigger = getSortTriggerForGroup(activeGroup);
+          if (sortTrigger) {
+            sortTrigger.focus();
+            ensureVisible(sortTrigger);
+            return;
+          }
+        }
+
+        if (dir === "left" && active.dataset.tvSortTrigger === "true" && active.dataset.tvSortTarget) {
+          const gridTarget = getPreferredInGroup(active.dataset.tvSortTarget);
+          if (gridTarget) {
+            gridTarget.focus();
+            ensureVisible(gridTarget);
+            return;
+          }
+        }
 
         if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
           const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));
@@ -241,14 +286,13 @@ export function useTvNavigation(enabled = true) {
           }
         }
 
-        // Keep horizontal focus locked within top nav so it doesn't spill into content.
         const activeRail = active.closest(".rail-scroll");
         const directionalPool =
           activeGroup === "top-nav" && (dir === "left" || dir === "right")
             ? getTopNavItems(items)
             : activeRail && (dir === "left" || dir === "right")
             ? items.filter((it) => it.closest(".rail-scroll") === activeRail)
-            : (dir === "left" || dir === "right")
+            : dir === "left" || dir === "right"
             ? items.filter((it) => getGroupKey(it) === activeGroup)
             : items.filter((it) => getGroupKey(it) !== "top-nav");
 
@@ -295,7 +339,6 @@ export function useTvNavigation(enabled = true) {
           next.focus();
           ensureVisible(next);
         } else if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
-          // Wrap within top nav for seamless left/right remote movement.
           const edge = pickTopNavEdge(directionalPool, dir === "left" ? "last" : "first");
           if (edge) {
             edge.focus();
@@ -305,7 +348,7 @@ export function useTvNavigation(enabled = true) {
         return;
       }
 
-      if (navKey === "Enter" || navKey === " ") {
+      if (action === "SELECT") {
         const episodeBtn = getEpisodeButton(active);
         if (episodeBtn) {
           e.preventDefault();
@@ -315,15 +358,11 @@ export function useTvNavigation(enabled = true) {
 
         if (isTextInputElement(active)) return;
         e.preventDefault();
-        const episodeButton = getEpisodeButton(active);
-        if (episodeButton) {
-          episodeButton.click();
-          return;
-        }
         active.click();
+        return;
       }
 
-      if (key === "Home") {
+      if (action === "HOME") {
         if (focusTopNav()) {
           e.preventDefault();
         }

@@ -40,6 +40,7 @@ const MediaCard = forwardRef<HTMLButtonElement, MediaCardProps>(
         onClick={() => onClick?.(item)}
         aria-label={subtitle ? `${item.title} — ${subtitle}` : item.title}
         data-tv-autofocus={autofocus ? "true" : undefined}
+        data-focus-id={`media:${item.id}`}
       >
         <img
           src={item.backdropUrl ?? item.posterUrl ?? ""}

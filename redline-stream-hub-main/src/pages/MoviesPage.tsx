@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/streaming/Layout";
 import RailCarousel from "@/components/streaming/RailCarousel";
 import DetailsModal from "@/components/streaming/DetailsModal";
@@ -32,6 +32,15 @@ export default function MoviesPage() {
     return arr;
   }, [_ratingsVersion, moviesQ.data, sort]);
 
+  useEffect(() => {
+    if (!movies.length) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest("[data-tv-group='movies-grid']")) return;
+
+    const preferred = document.querySelector<HTMLElement>("[data-tv-group='movies-grid'] [data-tv-autofocus='true'].focusable");
+    preferred?.focus();
+  }, [movies.length, sort]);
+
   return (
     <Layout>
       <div className="pt-[var(--nav-height)] tv-safe pb-16">
@@ -40,7 +49,7 @@ export default function MoviesPage() {
 
           <div className="w-full sm:w-56">
             <Select value={sort} onValueChange={(v) => setSort(v as any)}>
-              <SelectTrigger className="focusable">
+              <SelectTrigger className="focusable" data-tv-sort-trigger="true" data-tv-sort-target="movies-grid">
                 <SelectValue placeholder="Sort" />
               </SelectTrigger>
               <SelectContent>
@@ -57,7 +66,7 @@ export default function MoviesPage() {
 
         <div className="mt-10">
           <h2 className="text-lg sm:text-xl font-bold text-foreground mb-4">All Movies</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4" data-tv-group="movies-grid">
             {movies.map((it, idx) => {
               const lastMediaId = typeof window !== "undefined" ? window.sessionStorage.getItem("redline:last-media-id") : null;
               return (
