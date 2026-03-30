@@ -33,9 +33,20 @@ export default function Layout({ children }: LayoutProps) {
       const active = document.activeElement as HTMLElement | null;
       if (active?.classList.contains("focusable") && active.isConnected) return;
 
+      const forcedRoute = window.sessionStorage.getItem("redline:return-focus-route");
+      const forcedSelector = window.sessionStorage.getItem("redline:return-focus-selector");
+      const forcedMatch = forcedRoute === routeKey && typeof forcedSelector === "string";
+      if (forcedMatch) {
+        window.sessionStorage.removeItem("redline:return-focus-route");
+        window.sessionStorage.removeItem("redline:return-focus-selector");
+      }
+
       const snapshot = getFocusSnapshot(routeKey);
       const restored = snapshot ? document.querySelector<HTMLElement>(snapshot.selector) : null;
+      const forcedSelectorValue = forcedMatch ? forcedSelector : null;
+      const forcedTarget = forcedSelectorValue ? document.querySelector<HTMLElement>(forcedSelectorValue) : null;
       const target =
+        forcedTarget ||
         restored ||
         document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
         document.querySelector<HTMLElement>("main .focusable") ||

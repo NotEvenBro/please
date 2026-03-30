@@ -258,6 +258,12 @@ export default function WatchPage() {
       window.sessionStorage.setItem("redline:force-tv-mode", "1");
       const target = window.sessionStorage.getItem("redline:last-browse-path");
       if (target) {
+        window.sessionStorage.setItem("redline:return-focus-route", target);
+      } else {
+        window.sessionStorage.setItem("redline:return-focus-route", "/");
+      }
+      window.sessionStorage.setItem("redline:return-focus-selector", "[data-tv-group='top-nav'] .focusable");
+      if (target) {
         navigate(target, { replace: true });
         return;
       }
@@ -497,9 +503,6 @@ export default function WatchPage() {
   }, [isPlaying, itemDetails?.UserData?.PlaybackPositionTicks, navigate, nextEpisode?.Id]);
 
   useEffect(() => {
-    const shell = playerShellRef.current;
-    if (!shell) return;
-
     const onKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
       const isSeekFocused = active === seekRef.current;
@@ -625,8 +628,8 @@ export default function WatchPage() {
       }
     };
 
-    shell.addEventListener("keydown", onKeyDown);
-    return () => shell.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown as EventListener);
   }, [navigate, goBackToBrowse, showSeasonPanel]);
 
   useEffect(() => {
