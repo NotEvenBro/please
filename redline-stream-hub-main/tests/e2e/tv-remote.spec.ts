@@ -121,19 +121,19 @@ test("season panel supports remote up/down navigation", async ({ page }) => {
   await page.goto("/watch/ep-1");
   await page.waitForTimeout(400);
 
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-
-  await page.keyboard.press("ArrowUp");
+  const seasonButton = page.locator("button[data-watch-control='row']:has(svg[data-lucide='list-video'])");
+  await seasonButton.focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("[data-tv-group='watch-season-panel']")).toBeVisible();
 
+  const before = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText || "");
   await page.keyboard.press("ArrowDown");
   const firstDown = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText || "");
   await page.keyboard.press("ArrowDown");
   const secondDown = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText || "");
 
+  expect(before).not.toEqual("");
+  expect(firstDown).not.toEqual(before);
   expect(firstDown).not.toEqual("");
   expect(secondDown).not.toEqual("");
   expect(secondDown).not.toEqual(firstDown);
