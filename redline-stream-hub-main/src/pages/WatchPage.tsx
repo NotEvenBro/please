@@ -255,6 +255,7 @@ export default function WatchPage() {
 
   const goBackToBrowse = () => {
     if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("redline:force-tv-mode", "1");
       const target = window.sessionStorage.getItem("redline:last-browse-path");
       if (target) {
         navigate(target, { replace: true });
@@ -504,6 +505,30 @@ export default function WatchPage() {
       const isSeekFocused = active === seekRef.current;
       const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });
 
+      if (showSeasonPanel) {
+        const episodeButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-group='watch-season-panel'] .focusable")).filter(
+          (el) => !(el as HTMLButtonElement).disabled
+        );
+        const idx = active ? episodeButtons.indexOf(active) : -1;
+
+        if (action === "UP" || action === "DOWN") {
+          if (episodeButtons.length === 0) return;
+          e.preventDefault();
+          const nextIdx =
+            idx < 0 ? 0 : action === "UP" ? Math.max(0, idx - 1) : Math.min(episodeButtons.length - 1, idx + 1);
+          episodeButtons[nextIdx]?.focus();
+          episodeButtons[nextIdx]?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          return;
+        }
+
+        if (action === "LEFT" || action === "BACK") {
+          e.preventDefault();
+          setShowSeasonPanel(false);
+          seasonButtonRef.current?.focus();
+          return;
+        }
+      }
+
       if (action === "BACK") {
         e.preventDefault();
         goBackToBrowse();
@@ -602,7 +627,7 @@ export default function WatchPage() {
 
     shell.addEventListener("keydown", onKeyDown);
     return () => shell.removeEventListener("keydown", onKeyDown);
-  }, [navigate, goBackToBrowse]);
+  }, [navigate, goBackToBrowse, showSeasonPanel]);
 
   useEffect(() => {
     const t = window.setTimeout(() => playPauseButtonRef.current?.focus(), 250);
