@@ -73,6 +73,17 @@ function getMainContentTarget() {
   );
 }
 
+function getSortTriggerForGroup(group: string) {
+  return document.querySelector<HTMLElement>(`[data-tv-sort-trigger='true'][data-tv-sort-target='${group}'].focusable`);
+}
+
+function getPreferredInGroup(group: string) {
+  return (
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] [data-tv-autofocus='true'].focusable`) ||
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] .focusable`)
+  );
+}
+
 function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
   if (!items.length) return null;
   const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
@@ -247,6 +258,24 @@ export function useTvNavigation(enabled = true) {
               ensureVisible(nextNav);
               return;
             }
+          }
+        }
+
+        if (dir === "right" && (activeGroup === "movies-grid" || activeGroup === "shows-grid")) {
+          const sortTrigger = getSortTriggerForGroup(activeGroup);
+          if (sortTrigger) {
+            sortTrigger.focus();
+            ensureVisible(sortTrigger);
+            return;
+          }
+        }
+
+        if (dir === "left" && active.dataset.tvSortTrigger === "true" && active.dataset.tvSortTarget) {
+          const gridTarget = getPreferredInGroup(active.dataset.tvSortTarget);
+          if (gridTarget) {
+            gridTarget.focus();
+            ensureVisible(gridTarget);
+            return;
           }
         }
 
