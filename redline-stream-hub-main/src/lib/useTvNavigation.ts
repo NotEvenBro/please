@@ -66,6 +66,13 @@ function getTopNavItems(items: HTMLElement[]) {
   return items.filter((x) => getGroupKey(x) === "top-nav");
 }
 
+function getMainContentTarget() {
+  return (
+    document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
+    document.querySelector<HTMLElement>("main .focusable")
+  );
+}
+
 function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
   if (!items.length) return null;
   const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
@@ -219,6 +226,29 @@ export function useTvNavigation(enabled = true) {
         const dir: Dir = navAction === "LEFT" ? "left" : navAction === "RIGHT" ? "right" : navAction === "UP" ? "up" : "down";
 
         const activeGroup = getGroupKey(active);
+
+        if (activeGroup === "top-nav" && dir === "down") {
+          const mainTarget = getMainContentTarget();
+          if (mainTarget) {
+            mainTarget.focus();
+            ensureVisible(mainTarget);
+          }
+          return;
+        }
+
+        if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
+          const navItems = getTopNavItems(items).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          const idx = navItems.indexOf(active);
+          if (idx >= 0 && navItems.length > 0) {
+            const nextIdx = dir === "left" ? (idx - 1 + navItems.length) % navItems.length : (idx + 1) % navItems.length;
+            const nextNav = navItems[nextIdx];
+            if (nextNav) {
+              nextNav.focus();
+              ensureVisible(nextNav);
+              return;
+            }
+          }
+        }
 
         if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
           const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));

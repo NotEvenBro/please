@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { mapRemoteAction } from "@/lib/remoteActions";
 
 export type ControlMode = "tv" | "pc";
@@ -22,12 +22,19 @@ function shouldStartInTvMode() {
 
 export function useControlMode() {
   const [mode, setMode] = useState<ControlMode>(() => (shouldStartInTvMode() ? "tv" : "pc"));
+  const lastRemoteInputAtRef = useRef(0);
 
   useEffect(() => {
-    const onPointer = () => setMode("pc");
+    const onPointer = (event: MouseEvent | PointerEvent) => {
+      if (isLikelyTvUa()) return;
+      if ("pointerType" in event && event.pointerType && event.pointerType !== "mouse") return;
+      if (Date.now() - lastRemoteInputAtRef.current < 4000) return;
+      setMode("pc");
+    };
     const onKey = (e: KeyboardEvent) => {
       const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });
       if (action) {
+        lastRemoteInputAtRef.current = Date.now();
         setMode("tv");
       }
     };
