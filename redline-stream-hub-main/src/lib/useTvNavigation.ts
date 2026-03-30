@@ -176,7 +176,7 @@ export function useTvNavigation(enabled = true) {
     if (!enabled) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (selectOpen()) return;
 
       const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });

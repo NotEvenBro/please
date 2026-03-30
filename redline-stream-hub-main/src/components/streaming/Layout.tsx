@@ -19,6 +19,7 @@ export default function Layout({ children }: LayoutProps) {
     init({
       debug: false,
       visualDebug: false,
+      nativeMode: true,
       shouldFocusDOMNode: true,
       throttle: 16,
       throttleKeypresses: true,
