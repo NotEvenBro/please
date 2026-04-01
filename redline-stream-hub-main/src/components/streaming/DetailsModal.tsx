@@ -325,9 +325,9 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
               </div>
 
               <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1" data-tv-episode-column="true">
-                {episodes.map((ep) => {
+                {episodes.map((ep, idx) => {
                   const ui = jellyfinToMediaUI(ep, { posterWidth: 420, backdropWidth: 900 });
-                  const epNum = ep.IndexNumber != null ? ep.IndexNumber : index + 1;
+                  const epNum = ep.IndexNumber != null ? ep.IndexNumber : idx + 1;
                   const dur = ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 10_000_000 / 60) : undefined;
                   return (
                     <button

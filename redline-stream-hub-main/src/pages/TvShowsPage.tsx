@@ -50,15 +50,6 @@ export default function TvShowsPage() {
     preferred?.focus();
   }, [series.length]);
 
-  useEffect(() => {
-    if (!series.length) return;
-    const active = document.activeElement as HTMLElement | null;
-    if (active?.closest("[data-tv-group='shows-grid']")) return;
-
-    const preferred = document.querySelector<HTMLElement>("[data-tv-group='shows-grid'] [data-tv-autofocus='true'].focusable");
-    preferred?.focus();
-  }, [series.length, sort]);
-
   return (
     <Layout>
       <div className="pt-[var(--nav-height)] tv-safe pb-16">
