@@ -42,10 +42,6 @@ function getFirstFocusableInGroup(group: string) {
   return document.querySelector<HTMLElement>(`[data-tv-group="${group}"] .focusable`);
 }
 
-function isNearTopOfPage() {
-  return (window.scrollY || window.pageYOffset || 0) <= 16;
-}
-
 function getGroupKey(el: HTMLElement): string {
   const group = el.closest<HTMLElement>("[data-tv-group]");
   if (group?.dataset.tvGroup) return group.dataset.tvGroup;
@@ -71,21 +67,6 @@ function getMainContentTarget() {
     document.querySelector<HTMLElement>("main [data-tv-autofocus='true'].focusable") ||
     document.querySelector<HTMLElement>("main .focusable")
   );
-}
-
-function getSortTriggerForGroup(group: string) {
-  return document.querySelector<HTMLElement>(`[data-tv-sort-trigger='true'][data-tv-sort-target='${group}'].focusable`);
-}
-
-function getPreferredInGroup(group: string) {
-  return (
-    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] [data-tv-autofocus='true'].focusable`) ||
-    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] .focusable`)
-  );
-}
-
-function getVisibleSortTrigger() {
-  return document.querySelector<HTMLElement>("[data-tv-sort-trigger='true'].focusable");
 }
 
 function isInTopContentRow(active: HTMLElement, items: HTMLElement[]) {
@@ -272,25 +253,7 @@ export function useTvNavigation(enabled = true) {
           }
         }
 
-        if (dir === "right" && (activeGroup === "movies-grid" || activeGroup === "shows-grid")) {
-          const sortTrigger = getSortTriggerForGroup(activeGroup);
-          if (sortTrigger) {
-            sortTrigger.focus();
-            ensureVisible(sortTrigger);
-            return;
-          }
-        }
-
-        if (dir === "left" && active.dataset.tvSortTrigger === "true" && active.dataset.tvSortTarget) {
-          const gridTarget = getPreferredInGroup(active.dataset.tvSortTarget);
-          if (gridTarget) {
-            gridTarget.focus();
-            ensureVisible(gridTarget);
-            return;
-          }
-        }
-
-        if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage() && isInTopContentRow(active, items)) {
+        if (dir === "up" && activeGroup !== "top-nav" && isInTopContentRow(active, items)) {
           const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));
           if (!inWatchPage && focusTopNav()) {
             return;
