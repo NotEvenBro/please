@@ -332,7 +332,7 @@ export default function DetailsModal({ item, onClose }: DetailsModalProps) {
                   return (
                     <button
                       key={ep.Id}
-                      className="w-full text-left focusable rounded-md bg-background/30 hover:bg-background/40 transition-colors p-3 flex gap-3 items-center"
+                      className="relative w-full text-left focusable rounded-md border border-transparent bg-background/30 p-3 flex gap-3 items-center transition-all hover:bg-background/40 focus-visible:outline-none focus-visible:border-primary/70 focus-visible:bg-background/60 focus-visible:z-20 focus-visible:-translate-y-0.5 focus-visible:scale-[1.01] focus-visible:shadow-[0_12px_28px_rgba(0,0,0,0.45)]"
                       onClick={() => navigate(`/watch/${ep.Id}`)}
                       data-episode-id={ep.Id}
                       data-tv-episode-column-item="true"
