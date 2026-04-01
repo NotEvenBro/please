@@ -312,6 +312,17 @@ export function useTvNavigation(enabled = true) {
         if (next) {
           next.focus();
           ensureVisible(next);
+        } else if (dir === "right" && active.closest(".rail-scroll")) {
+          const railItems = directionalPool.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          const rightMost = railItems[railItems.length - 1];
+          if (rightMost === active) {
+            const sortTrigger = getVisibleSortTrigger();
+            if (sortTrigger) {
+              sortTrigger.focus();
+              ensureVisible(sortTrigger);
+              return;
+            }
+          }
         } else if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
           const edge = pickTopNavEdge(directionalPool, dir === "left" ? "last" : "first");
           if (edge) {
