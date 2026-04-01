@@ -32,6 +32,15 @@ export default function MoviesPage() {
     preferred?.focus();
   }, [movies.length]);
 
+  useEffect(() => {
+    if (!movies.length) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest("[data-tv-group='movies-grid']")) return;
+
+    const preferred = document.querySelector<HTMLElement>("[data-tv-group='movies-grid'] [data-tv-autofocus='true'].focusable");
+    preferred?.focus();
+  }, [movies.length, sort]);
+
   return (
     <Layout>
       <div className="pt-[var(--nav-height)] tv-safe pb-16">

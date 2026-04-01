@@ -119,3 +119,20 @@ Recommended path for this project:
 1. Keep one frontend for now and continue hardening TV mode (which is already underway).
 2. Isolate TV-specific UI/logic behind feature flags/routes/components.
 3. Re-evaluate a hard split only if velocity slows due to constant cross-platform compromises.
+
+## End-to-end TV remote tests (Playwright)
+
+This repo now includes a minimal Playwright suite focused on remote-control regressions.
+
+```sh
+# install deps
+npm install
+
+# install browser binaries
+npm run e2e:install
+
+# run e2e tests
+npm run e2e
+```
+
+Test files live under `tests/e2e`.
