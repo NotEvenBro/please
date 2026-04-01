@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { savePlaybackProgress, useItem, useSeasonEpisodes, useSeriesSeasons } from "@/hooks/use-jellyfin";
 import { jellyfinToMediaUI } from "@/lib/mediaAdapters";
+import { mapRemoteAction } from "@/lib/remoteActions";
 
 async function tryRequestFullscreen(target: HTMLElement) {
   const el = target as HTMLElement & {
@@ -68,14 +69,6 @@ function isViddaEdgeDevice() {
   return /vidaa|vidda_edge|hisense/i.test(navigator.userAgent || "");
 }
 
-const REMOTE_BACK_KEYS = new Set(["Escape", "BrowserBack", "Backspace", "GoBack", "XF86Back"]);
-const REMOTE_BACK_CODES = new Set([8, 27, 461, 10009, 166]);
-const REMOTE_PLAY_PAUSE_CODES = new Set([13, 23, 66, 179, 415]);
-const REMOTE_PAUSE_CODES = new Set([19]);
-const REMOTE_SEEK_FORWARD_CODES = new Set([417, 228]);
-const REMOTE_SEEK_BACK_CODES = new Set([412, 227]);
-const REMOTE_VOLUME_UP_CODES = new Set([447, 175]);
-const REMOTE_VOLUME_DOWN_CODES = new Set([448, 174]);
 
 export default function WatchPage() {
   const { id } = useParams();
@@ -262,7 +255,14 @@ export default function WatchPage() {
 
   const goBackToBrowse = () => {
     if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("redline:force-tv-mode", "1");
       const target = window.sessionStorage.getItem("redline:last-browse-path");
+      if (target) {
+        window.sessionStorage.setItem("redline:return-focus-route", target);
+      } else {
+        window.sessionStorage.setItem("redline:return-focus-route", "/");
+      }
+      window.sessionStorage.setItem("redline:return-focus-selector", "[data-tv-group='top-nav'] .focusable");
       if (target) {
         navigate(target, { replace: true });
         return;
@@ -503,21 +503,42 @@ export default function WatchPage() {
   }, [isPlaying, itemDetails?.UserData?.PlaybackPositionTicks, navigate, nextEpisode?.Id]);
 
   useEffect(() => {
-    const shell = playerShellRef.current;
-    if (!shell) return;
-
     const onKeyDown = (e: KeyboardEvent) => {
-      const keyCode = typeof e.keyCode === "number" ? e.keyCode : 0;
       const active = document.activeElement as HTMLElement | null;
       const isSeekFocused = active === seekRef.current;
+      const action = mapRemoteAction({ key: e.key, code: e.code, keyCode: e.keyCode });
 
-      if (REMOTE_BACK_KEYS.has(e.key) || REMOTE_BACK_CODES.has(keyCode)) {
+      if (showSeasonPanel) {
+        const episodeButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-group='watch-season-panel'] .focusable")).filter(
+          (el) => !(el as HTMLButtonElement).disabled
+        );
+        const idx = active ? episodeButtons.indexOf(active) : -1;
+
+        if (action === "UP" || action === "DOWN") {
+          if (episodeButtons.length === 0) return;
+          e.preventDefault();
+          const nextIdx =
+            idx < 0 ? 0 : action === "UP" ? Math.max(0, idx - 1) : Math.min(episodeButtons.length - 1, idx + 1);
+          episodeButtons[nextIdx]?.focus();
+          episodeButtons[nextIdx]?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          return;
+        }
+
+        if (action === "LEFT" || action === "BACK") {
+          e.preventDefault();
+          setShowSeasonPanel(false);
+          seasonButtonRef.current?.focus();
+          return;
+        }
+      }
+
+      if (action === "BACK") {
         e.preventDefault();
         goBackToBrowse();
         return;
       }
 
-      if (REMOTE_PLAY_PAUSE_CODES.has(keyCode) || ["Enter", " ", "MediaPlayPause", "OK", "Select", "Center"].includes(e.key)) {
+      if (action === "SELECT" || action === "PLAY_PAUSE") {
         e.preventDefault();
         if (active?.classList.contains("focusable")) {
           active.click();
@@ -527,37 +548,37 @@ export default function WatchPage() {
         return;
       }
 
-      if (REMOTE_PAUSE_CODES.has(keyCode) || e.key === "MediaPause") {
+      if (action === "PAUSE") {
         e.preventDefault();
         videoRef.current?.pause();
         return;
       }
 
-      if (REMOTE_SEEK_FORWARD_CODES.has(keyCode) || e.key === "MediaTrackNext") {
+      if (action === "SEEK_FORWARD") {
         e.preventDefault();
         seekBy(10);
         return;
       }
 
-      if (REMOTE_SEEK_BACK_CODES.has(keyCode) || e.key === "MediaTrackPrevious") {
+      if (action === "SEEK_BACK") {
         e.preventDefault();
         seekBy(-10);
         return;
       }
 
-      if (REMOTE_VOLUME_UP_CODES.has(keyCode)) {
+      if (action === "VOLUME_UP") {
         e.preventDefault();
         setVolume((prev) => Math.min(1, prev + 0.05));
         return;
       }
 
-      if (REMOTE_VOLUME_DOWN_CODES.has(keyCode)) {
+      if (action === "VOLUME_DOWN") {
         e.preventDefault();
         setVolume((prev) => Math.max(0, prev - 0.05));
         return;
       }
 
-      if (e.key === "ArrowUp") {
+      if (action === "UP") {
         if (isSeekFocused) {
           e.preventDefault();
           setShowControls(false);
@@ -581,7 +602,7 @@ export default function WatchPage() {
         return;
       }
 
-      if (e.key === "ArrowDown") {
+      if (action === "DOWN") {
         showControlsNow();
         if (isSeekFocused) {
           e.preventDefault();
@@ -590,26 +611,26 @@ export default function WatchPage() {
         return;
       }
 
-      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isSeekFocused) {
+      if ((action === "LEFT" || action === "RIGHT") && isSeekFocused) {
         e.preventDefault();
-        seekBy(e.key === "ArrowLeft" ? -10 : 10);
+        seekBy(action === "LEFT" ? -10 : 10);
         return;
       }
 
-      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && active?.dataset.watchControl === "row") {
+      if ((action === "LEFT" || action === "RIGHT") && active?.dataset.watchControl === "row") {
         const rowControls = Array.from(document.querySelectorAll<HTMLElement>("[data-watch-control='row'].focusable")).filter((el) => !(el as HTMLButtonElement).disabled);
         const idx = rowControls.indexOf(active);
         if (idx >= 0) {
           e.preventDefault();
-          const nextIdx = e.key === "ArrowLeft" ? Math.max(0, idx - 1) : Math.min(rowControls.length - 1, idx + 1);
+          const nextIdx = action === "LEFT" ? Math.max(0, idx - 1) : Math.min(rowControls.length - 1, idx + 1);
           rowControls[nextIdx]?.focus();
         }
       }
     };
 
-    shell.addEventListener("keydown", onKeyDown);
-    return () => shell.removeEventListener("keydown", onKeyDown);
-  }, [navigate, goBackToBrowse]);
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown as EventListener);
+  }, [navigate, goBackToBrowse, showSeasonPanel]);
 
   useEffect(() => {
     const t = window.setTimeout(() => playPauseButtonRef.current?.focus(), 250);
