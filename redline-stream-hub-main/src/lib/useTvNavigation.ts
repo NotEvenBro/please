@@ -73,6 +73,28 @@ function getMainContentTarget() {
   );
 }
 
+function getSortTriggerForGroup(group: string) {
+  return document.querySelector<HTMLElement>(`[data-tv-sort-trigger='true'][data-tv-sort-target='${group}'].focusable`);
+}
+
+function getPreferredInGroup(group: string) {
+  return (
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] [data-tv-autofocus='true'].focusable`) ||
+    document.querySelector<HTMLElement>(`[data-tv-group='${group}'] .focusable`)
+  );
+}
+
+function getVisibleSortTrigger() {
+  return document.querySelector<HTMLElement>("[data-tv-sort-trigger='true'].focusable");
+}
+
+function isInTopContentRow(active: HTMLElement, items: HTMLElement[]) {
+  const contentItems = items.filter((it) => getGroupKey(it) !== "top-nav");
+  if (!contentItems.length) return false;
+  const minTop = Math.min(...contentItems.map((it) => it.getBoundingClientRect().top));
+  return active.getBoundingClientRect().top <= minTop + 40;
+}
+
 function pickTopNavEdge(items: HTMLElement[], edge: "first" | "last") {
   if (!items.length) return null;
   const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
@@ -250,7 +272,25 @@ export function useTvNavigation(enabled = true) {
           }
         }
 
-        if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage()) {
+        if (dir === "right" && (activeGroup === "movies-grid" || activeGroup === "shows-grid")) {
+          const sortTrigger = getSortTriggerForGroup(activeGroup);
+          if (sortTrigger) {
+            sortTrigger.focus();
+            ensureVisible(sortTrigger);
+            return;
+          }
+        }
+
+        if (dir === "left" && active.dataset.tvSortTrigger === "true" && active.dataset.tvSortTarget) {
+          const gridTarget = getPreferredInGroup(active.dataset.tvSortTarget);
+          if (gridTarget) {
+            gridTarget.focus();
+            ensureVisible(gridTarget);
+            return;
+          }
+        }
+
+        if (dir === "up" && activeGroup !== "top-nav" && isNearTopOfPage() && isInTopContentRow(active, items)) {
           const inWatchPage = Boolean(active.closest("[data-tv-group='watch-page']"));
           if (!inWatchPage && focusTopNav()) {
             return;
@@ -309,6 +349,17 @@ export function useTvNavigation(enabled = true) {
         if (next) {
           next.focus();
           ensureVisible(next);
+        } else if (dir === "right" && active.closest(".rail-scroll")) {
+          const railItems = directionalPool.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          const rightMost = railItems[railItems.length - 1];
+          if (rightMost === active) {
+            const sortTrigger = getVisibleSortTrigger();
+            if (sortTrigger) {
+              sortTrigger.focus();
+              ensureVisible(sortTrigger);
+              return;
+            }
+          }
         } else if (activeGroup === "top-nav" && (dir === "left" || dir === "right")) {
           const edge = pickTopNavEdge(directionalPool, dir === "left" ? "last" : "first");
           if (edge) {
